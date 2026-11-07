@@ -504,7 +504,11 @@ window.__boot = () => {
   }
   function checkMot(saisi, attendu) {
     const norm = x => String(x).normalize("NFC").replace(/[’‘`´]/g, "'").replace(/œ/g, "oe").replace(/Œ/g, "Oe").replace(/\s*([,/])\s*/g, ", ").replace(/\s+/g, " ").trim();
-    const a = norm(saisi), b = norm(attendu);
+    let a = norm(saisi);
+    const b = norm(attendu);
+    // Griffonner met d'office une majuscule à la première lettre : si le mot attendu commence par une minuscule,
+    // on ne la compte pas comme une faute. L'inverse (minuscule au lieu d'une majuscule) reste une erreur.
+    if (b && b[0] === b[0].toLowerCase() && a[0] && a[0] !== a[0].toLowerCase()) a = a[0].toLowerCase() + a.slice(1);
     if (a === b) return { ok: true };
     if (a.toLowerCase() === b.toLowerCase()) return { ok: false, msg: "Presque : attention aux majuscules." };
     const sansAccents = x => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
