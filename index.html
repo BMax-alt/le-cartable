@@ -137,37 +137,135 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .review li { background: var(--paper); border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; gap: 12px; box-shadow: 0 1px 0 var(--line); }
 .review li span:last-child { color: var(--muted); white-space: nowrap; font-size: 16px; }
 .end .actions { justify-content: center; max-width: 720px; width: 100%; }
+
+/* Entrée par prénom */
+.who { overflow-y: auto; gap: 28px; padding-block: 24px; max-width: 760px; width: 100%; margin: 0 auto; }
+.ask { font-family: var(--display); font-weight: 600; font-size: clamp(26px, 4vw, 36px); margin: 0; }
+.users { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.user { display: flex; align-items: center; gap: 14px; background: var(--paper); border-radius: 14px; padding: 16px 18px; font-family: var(--display); font-weight: 800; font-size: 26px; text-align: left; box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08); }
+.initial { flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 26px; }
+.newuser { display: flex; flex-direction: column; gap: 10px; }
+.newuser label { color: var(--muted); font-size: 18px; }
+.newuser .row { display: flex; gap: 12px; flex-wrap: wrap; }
+.newuser input { flex: 1; min-width: 200px; min-height: 64px; border-radius: 14px; border: 2px solid var(--line); background: var(--paper); padding: 0 18px; font-family: var(--display); font-size: 26px; color: var(--ink); -webkit-user-select: text; user-select: text; }
+.newuser input:focus { outline: none; border-color: var(--pen); }
+.newuser .big { flex: 0 1 220px; }
+.brand { justify-content: space-between; }
+/* Navigation */
+.dots { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px; scrollbar-width: none; }
+.dots::-webkit-scrollbar { display: none; }
+.dot { flex: none; min-width: 34px; height: 34px; border-radius: 99px; background: var(--paper); box-shadow: inset 0 0 0 2px var(--line); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.dot.ok { background: var(--good); box-shadow: none; color: #fff; }
+.dot.mid { background: var(--mid); box-shadow: none; color: #fff; }
+.dot.bad { background: var(--bad); box-shadow: none; color: #fff; }
+.dot.cur { box-shadow: 0 0 0 3px var(--pen); color: var(--ink); font-weight: 700; }
+.dot.cur.ok, .dot.cur.mid, .dot.cur.bad { color: #fff; }
+.actions { align-items: stretch; }
+.actions .main { flex: 1; display: flex; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.nav { flex: none; width: 64px; min-height: 64px; border-radius: 14px; background: var(--paper); font-size: 28px; font-weight: 700; box-shadow: 0 2px 0 var(--line); }
+.nav:disabled { opacity: .35; cursor: default; }
+.big.picked { outline: 4px solid var(--ink); outline-offset: 2px; }
+/* Félicitations */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(100px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: #fff; font-family: var(--display); font-weight: 600; font-size: 22px; padding: 14px 24px; border-radius: 99px; box-shadow: 0 10px 30px rgba(29,43,79,.3); z-index: 20; max-width: calc(100% - 32px); text-align: center; animation: pop .3s ease-out; }
+@keyframes pop { from { transform: translate(-50%, 12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+.medal { width: 96px; height: 96px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 56px; box-shadow: 0 6px 0 #d99a1a; }
+.end .sub { margin: 0; font-size: 20px; color: var(--muted); max-width: 40ch; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
 </head>
 <body>
 <div class="app" id="app"></div>
+<div class="toast" id="toast" hidden></div>
+<canvas class="confetti" id="confetti" hidden></canvas>
 
 <script>
 window.__boot = () => {
   const DECKS = Array.isArray(window.DECKS) ? window.DECKS : [];
   const app = document.getElementById("app");
+  // Le prénom et les scores restent sur cet iPad (stockage local), jamais en ligne.
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem("cartable:" + k)); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem("cartable:" + k, JSON.stringify(v)); } catch (e) {} }
   };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const plural = (n, w) => n + " " + w + (n > 1 ? "s" : "");
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  let user = store.get("current");
   let wakeLock = null;
   const keepAwake = async () => { try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) {} };
   const letSleep = () => { try { wakeLock?.release(); } catch (e) {} wakeLock = null; };
 
+  /* ---------- Félicitations ---------- */
+  let toastTimer = null;
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+  function confetti() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const cv = document.getElementById("confetti"), ctx = cv.getContext("2d");
+    const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); cv.hidden = false;
+    const colors = ["#f2b632", "#2f9a5d", "#1f3fa6", "#e2696b", "#e08a1e"];
+    const bits = Array.from({ length: 140 }, () => ({
+      x: Math.random() * W, y: -20 - Math.random() * H * 0.5, vx: (Math.random() - 0.5) * 3,
+      vy: 2 + Math.random() * 3, r: Math.random() * 6.3, vr: (Math.random() - 0.5) * 0.3,
+      w: 6 + Math.random() * 6, h: 8 + Math.random() * 8, c: pick(colors)
+    }));
+    const t0 = performance.now();
+    (function frame(t) {
+      ctx.clearRect(0, 0, W, H);
+      for (const b of bits) {
+        b.x += b.vx; b.y += b.vy; b.vy += 0.04; b.r += b.vr;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.fillStyle = b.c;
+        ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); ctx.restore();
+      }
+      if (t - t0 < 3200) requestAnimationFrame(frame); else { ctx.clearRect(0, 0, W, H); cv.hidden = true; }
+    })(t0);
+  }
+
+  /* ---------- Entrée par prénom ---------- */
+  function who() {
+    letSleep();
+    const users = store.get("users") || [];
+    app.innerHTML = `<div class="view who">
+      <div class="brand"><h1>Le Cartable</h1></div>
+      <h2 class="ask">Qui révise aujourd'hui ?</h2>
+      ${users.length ? `<div class="users">${users.map(u => `<button class="user" data-u="${esc(u)}"><span class="initial">${esc(u.charAt(0).toUpperCase())}</span>${esc(u)}</button>`).join("")}</div>` : ""}
+      <form class="newuser" id="newuser">
+        <label for="prenom">${users.length ? "Quelqu'un d'autre ? Écris ton prénom" : "Écris ton prénom pour commencer"}</label>
+        <div class="row">
+          <input id="prenom" name="prenom" maxlength="20" autocomplete="off" autocapitalize="words" placeholder="Ton prénom">
+          <button class="big g" type="submit">C'est moi !</button>
+        </div>
+      </form>
+    </div>`;
+    app.querySelectorAll(".user").forEach(b => b.onclick = () => login(b.dataset.u));
+    document.getElementById("newuser").addEventListener("submit", e => {
+      e.preventDefault();
+      const name = document.getElementById("prenom").value.trim().replace(/\s+/g, " ");
+      if (!name) { document.getElementById("prenom").focus(); return; }
+      const list = store.get("users") || [];
+      if (!list.includes(name)) { list.push(name); store.set("users", list); }
+      login(name);
+    });
+  }
+  function login(name) { user = name; store.set("current", name); home(); }
+
   /* ---------- Accueil ---------- */
   function home() {
     letSleep();
+    if (!user) return who();
     const byMatiere = {};
     DECKS.forEach(d => (byMatiere[d.matiere] ||= []).push(d));
     const groups = Object.keys(byMatiere).map(m => `
       <section class="matiere">
         <h2>${esc(m)}</h2>
         <div class="decks">${byMatiere[m].map(d => {
-          const last = store.get("deck:" + d.id);
+          const last = store.get("deck:" + user + ":" + d.id);
           const meta = last ? `Dernière fois : ${last.first}/${last.total} du premier coup` : "Pas encore révisé";
           return `<button class="deck" data-id="${esc(d.id)}">
             ${d.exemple ? '<span class="tag">Exemple</span>' : ""}
@@ -178,10 +276,11 @@ window.__boot = () => {
         }).join("")}</div>
       </section>`).join("");
     app.innerHTML = `<div class="view home">
-      <div class="brand"><h1>Le Cartable</h1><p>Choisis une leçon et écris tes réponses au crayon.</p></div>
+      <div class="brand"><h1>Bonjour ${esc(user)} !</h1><button class="back" id="switch">Changer de prénom</button></div>
+      <p class="hint">Choisis une leçon et écris tes réponses au crayon.</p>
       ${groups || '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
-      ${DECKS.some(d => d.exemple) ? '<p class="hint">Les paquets marqués « Exemple » servent à essayer l\'app. Les vraies cartes de la leçon arrivent bientôt.</p>' : ""}
     </div>`;
+    document.getElementById("switch").onclick = () => { user = null; store.set("current", null); who(); };
     app.querySelectorAll(".deck").forEach(b => b.addEventListener("click", () => {
       const d = DECKS.find(x => x.id === b.dataset.id);
       start(d, d.cartes.map((_, i) => i));
@@ -189,26 +288,32 @@ window.__boot = () => {
   }
 
   /* ---------- Séance ---------- */
+  // Un tour = toutes les cartes dans l'ordre, navigation libre. Les cartes pas sues repassent au tour suivant.
   function start(deck, indices) {
     keepAwake();
-    const s = {
-      deck, queue: indices.slice(), total: indices.length, done: 0,
-      tries: {}, firstOk: 0, partial: indices.length !== deck.cartes.length
-    };
+    const s = { deck, total: indices.length, partial: indices.length !== deck.cartes.length, round: 1, first: {}, streak: 0, best: 0 };
+    newRound(s, indices);
     card(s);
   }
+  function newRound(s, order) { s.order = order.slice(); s.pos = 0; s.grade = {}; s.ink = {}; s.shown = {}; }
 
   function card(s) {
-    if (!s.queue.length) return end(s);
-    const idx = s.queue[0];
+    const idx = s.order[s.pos];
     const c = s.deck.cartes[idx];
-    const pct = Math.round(100 * s.done / s.total);
+    const g = s.grade[idx];
+    const shown = s.shown[idx] || g != null;
+    const sues = s.order.filter(i => s.grade[i] === 2).length;
+    const dots = s.order.map((i, k) => {
+      const st = s.grade[i] === 2 ? "ok" : s.grade[i] === 1 ? "mid" : s.grade[i] === 0 ? "bad" : "";
+      return `<button class="dot ${st} ${k === s.pos ? "cur" : ""}" data-k="${k}" aria-label="Carte ${k + 1}">${k + 1}</button>`;
+    }).join("");
+    const gradeBtn = (v, cls, label) => `<button class="big ${cls} ${g === v ? "picked" : ""}" data-v="${v}">${label}</button>`;
     app.innerHTML = `<div class="view">
       <div class="topbar">
         <button class="back" id="quit">← Mes leçons</button>
         <div class="progress">
-          <div class="txt"><span>${esc(s.deck.titre)}</span><span>${s.done}/${s.total} sues</span></div>
-          <div class="bar"><i style="width:${pct}%"></i></div>
+          <div class="txt"><span>${esc(s.deck.titre)}${s.round > 1 ? ` · tour ${s.round}` : ""}</span><span>Carte ${s.pos + 1}/${s.order.length} · ${sues} sue${sues > 1 ? "s" : ""}</span></div>
+          <div class="dots" id="dots">${dots}</div>
         </div>
       </div>
       <div class="question"><small>${c.points ? "Question longue" : "Question"}</small><p>${esc(c.q)}</p></div>
@@ -219,64 +324,108 @@ window.__boot = () => {
           <button class="tool" id="undo">Annuler</button>
           <button class="tool" id="clear">Tout effacer</button>
         </div>
-        <div class="answer" id="ans" hidden>
+        <div class="answer" id="ans" ${shown ? "" : "hidden"}>
           <small>La réponse</small>
           <p class="r">${esc(c.r)}</p>
           ${c.points ? `<ul id="pts">${c.points.map(p => `<li><button><span class="box">✓</span><span>${esc(p)}</span></button></li>`).join("")}</ul>` : ""}
         </div>
       </div>
       <div class="actions" id="act">
-        <button class="big reveal" id="show">Voir la réponse</button>
+        <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
+        <div class="main" id="main">${shown
+          ? gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !")
+          : '<button class="big reveal" id="show">Voir la réponse</button>'}</div>
+        <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
       </div>
     </div>`;
-    const pad = drawPad(document.getElementById("cv"), document.getElementById("ph"));
+    s.ink[idx] ||= [];
+    const pad = drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
+    const go = k => { pad.stop(); s.pos = k; card(s); };
     document.getElementById("undo").onclick = pad.undo;
     document.getElementById("clear").onclick = pad.clear;
     document.getElementById("quit").onclick = () => { pad.stop(); home(); };
-    document.getElementById("show").onclick = () => {
+    document.getElementById("prev").onclick = () => s.pos > 0 && go(s.pos - 1);
+    document.getElementById("next").onclick = () => s.pos < s.order.length - 1 && go(s.pos + 1);
+    document.querySelectorAll("#dots .dot").forEach(b => b.onclick = () => go(+b.dataset.k));
+    document.querySelector("#dots .cur")?.scrollIntoView({ block: "nearest", inline: "center" });
+    const bindPoints = () => document.querySelectorAll("#pts li button").forEach(b => b.onclick = () => b.parentElement.classList.toggle("on"));
+    const bindGrades = () => document.querySelectorAll("#main .big[data-v]").forEach(b => b.onclick = () => { pad.stop(); grade(s, idx, +b.dataset.v); });
+    if (shown) { bindPoints(); bindGrades(); }
+    else document.getElementById("show").onclick = () => {
+      s.shown[idx] = true;
       document.getElementById("ans").hidden = false;
-      document.querySelectorAll("#pts li button").forEach(b => b.onclick = () => b.parentElement.classList.toggle("on"));
-      document.getElementById("act").innerHTML = `
-        <button class="big b" data-v="0">À revoir</button>
-        <button class="big m" data-v="1">Presque</button>
-        <button class="big g" data-v="2">Je savais !</button>`;
-      document.querySelectorAll("#act .big").forEach(b => b.onclick = () => { pad.stop(); grade(s, idx, +b.dataset.v); });
+      document.getElementById("main").innerHTML = gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
+      bindPoints(); bindGrades();
     };
   }
 
   function grade(s, idx, v) {
-    s.queue.shift();
-    const n = (s.tries[idx] = (s.tries[idx] || 0) + 1);
-    if (v === 2) { s.done++; if (n === 1) s.firstOk++; }
-    else if (v === 1) s.queue.push(idx);
-    else s.queue.splice(Math.min(2, s.queue.length), 0, idx);
-    card(s);
+    const regrade = s.grade[idx] != null;
+    s.grade[idx] = v;
+    if (s.round === 1) s.first[idx] = v;
+    if (!regrade) {
+      s.streak = v === 2 ? s.streak + 1 : 0;
+      if (s.streak > 0 && s.streak % 5 === 0) toast(pick([`Bravo ${user}, ${s.streak} de suite !`, `Quelle série, ${user} ! ${s.streak} d'affilée !`, `Tu es en feu, ${user} ! ${s.streak} de suite !`]));
+      else if (v === 2 && s.round === 1 && s.order.filter(i => s.grade[i] != null).length === Math.ceil(s.order.length / 2)) toast(`La moitié de la leçon, ${user} ! Continue comme ça.`);
+    }
+    // Carte suivante pas encore notée dans ce tour ; sinon fin du tour.
+    const n = s.order.length;
+    for (let k = 1; k <= n; k++) {
+      const p = (s.pos + k) % n;
+      if (s.grade[s.order[p]] == null) { s.pos = p; return card(s); }
+    }
+    endRound(s);
+  }
+
+  function endRound(s) {
+    const left = s.order.filter(i => s.grade[i] !== 2);
+    if (!left.length) return end(s);
+    app.innerHTML = `<div class="view end">
+      <h2>Tour ${s.round} terminé !</h2>
+      <p class="score">Encore <b>${left.length}</b> ${left.length > 1 ? "cartes" : "carte"} à revoir, ${esc(user)}. On les refait ?</p>
+      <div class="actions"><button class="big reveal" id="goon">On y va !</button><button class="big m" id="stop">Plus tard</button></div>
+    </div>`;
+    document.getElementById("goon").onclick = () => { s.round++; newRound(s, left); card(s); };
+    document.getElementById("stop").onclick = () => { saveScore(s); home(); };
+  }
+
+  function saveScore(s) {
+    const firstOk = Object.keys(s.first).filter(i => s.first[i] === 2).length;
+    if (!s.partial) store.set("deck:" + user + ":" + s.deck.id, { first: firstOk, total: s.total, date: new Date().toISOString().slice(0, 10) });
+    return firstOk;
   }
 
   function end(s) {
     letSleep();
-    if (!s.partial) store.set("deck:" + s.deck.id, { first: s.firstOk, total: s.total, date: new Date().toISOString().slice(0, 10) });
-    const hard = Object.keys(s.tries).filter(i => s.tries[i] > 1).map(Number);
-    const msg = s.firstOk === s.total ? "Parfait !" : s.firstOk >= s.total / 2 ? "Bravo !" : "Bien joué, on continue !";
+    const firstOk = saveScore(s);
+    const hard = Object.keys(s.first).filter(i => s.first[i] !== 2).map(Number);
+    const title = firstOk === s.total
+      ? pick([`Bravo ${user}, tu sais ta leçon par cœur !`, `Parfait, ${user} ! Tout juste du premier coup !`])
+      : pick([`Bravo ${user}, tu sais ta leçon !`, `Bravo ${user}, tu as réussi !`]);
+    const sub = firstOk === s.total ? "Pas une seule erreur. Chapeau !"
+      : s.round > 1 ? `Tu as tout revu en ${s.round} tours. C'est comme ça qu'on apprend !`
+      : "Tu as tout revu jusqu'au bout. Bien joué !";
     app.innerHTML = `<div class="view end">
-      <h2>${msg}</h2>
-      <p class="score"><b>${s.firstOk}</b> sur ${s.total} du premier coup.</p>
-      ${hard.length ? `<ul class="review">${hard.map(i => `<li><span>${esc(s.deck.cartes[i].q)}</span><span>vue ${s.tries[i]} fois</span></li>`).join("")}</ul>` : ""}
+      <div class="medal" aria-hidden="true">★</div>
+      <h2>${esc(title)}</h2>
+      <p class="sub">${sub}</p>
+      <p class="score"><b>${firstOk}</b> sur ${s.total} du premier coup.</p>
+      ${hard.length ? `<p class="hint">Les cartes qui t'ont demandé un effort :</p><ul class="review">${hard.map(i => `<li><span>${esc(s.deck.cartes[i].q)}</span></li>`).join("")}</ul>` : ""}
       <div class="actions">
-        ${hard.length ? '<button class="big m" id="hard">Revoir les difficiles</button>' : ""}
+        ${hard.length ? '<button class="big m" id="hard">Revoir ces cartes</button>' : ""}
         <button class="big g" id="again">Tout recommencer</button>
         <button class="big reveal" id="home">Mes leçons</button>
       </div>
     </div>`;
+    confetti();
     document.getElementById("again").onclick = () => start(s.deck, s.deck.cartes.map((_, i) => i));
     document.getElementById("home").onclick = home;
     if (hard.length) document.getElementById("hard").onclick = () => start(s.deck, hard);
   }
 
   /* ---------- Zone d'écriture au crayon ---------- */
-  function drawPad(cv, ph) {
+  function drawPad(cv, ph, strokes) {
     const ctx = cv.getContext("2d");
-    const strokes = [];
     let current = null, penSeen = false, w = 0, h = 0, rect = null;
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--pen").trim() || "#1f3fa6";
 
@@ -317,12 +466,12 @@ window.__boot = () => {
       for (const ce of evs) { const p = pt(ce); seg(current[current.length - 1], p); current.push(p); }
     });
     const up = () => { current = null; };
+    cv.addEventListener("pointerup", up);
+    cv.addEventListener("pointercancel", up);
     // Safari iPad : sans ça, le trait du Pencil est pris pour un défilement ou une sélection et se coupe.
     const block = e => { if (e.cancelable) e.preventDefault(); };
     ["touchstart", "touchmove", "touchend"].forEach(t => cv.addEventListener(t, block, { passive: false }));
     cv.addEventListener("contextmenu", block);
-    cv.addEventListener("pointerup", up);
-    cv.addEventListener("pointercancel", up);
     const ro = new ResizeObserver(size); ro.observe(cv);
     size();
     return {
