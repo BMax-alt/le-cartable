@@ -224,6 +224,33 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .answer.mini { max-height: none; gap: 0; padding: 10px 14px; }
 .answer.mini > :not(.fold) { display: none; }
 .answer.mini .fold { margin: 0; align-self: stretch; text-align: center; background: none; font-weight: 700; color: var(--pen); }
+/* Grande ligne de cahier (Seyès) où l'on écrit au crayon : Griffonner la transforme en texte. */
+.ligne { display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; width: 100%; }
+.seyes { position: relative; flex: 1 1 520px; max-width: 760px; height: 144px; border-radius: 14px; overflow: hidden;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(90deg, transparent 63px, var(--margin-red) 63px, var(--margin-red) 65px, transparent 65px),
+    linear-gradient(var(--seyes-thick) 1.5px, transparent 1.5px),
+    linear-gradient(var(--seyes-thin) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 48px, 100% 12px;
+  background-position: 0 0, 0 47px, 0 11px;
+  box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08); border: 2px solid var(--line); }
+.seyes:focus-within { border-color: var(--pen); }
+.seyes input { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; padding: 0 20px 0 84px;
+  font-family: var(--body); font-size: 54px; line-height: 1; color: var(--pen); -webkit-user-select: text; user-select: text; }
+.seyes input:focus { outline: none; }
+.seyes input::placeholder { color: var(--muted); opacity: .45; font-size: 26px; }
+.seyes input[readonly] { color: var(--ink); }
+.seyes.court { height: 96px; flex-basis: 360px; max-width: 520px; }
+.seyes.court input { font-size: 44px; }
+.ligne .big { flex: 0 0 auto; min-width: 180px; }
+.sheet.dictee { display: flex; align-items: center; justify-content: center; padding: 24px 24px 24px 24px; background-image: none; background-color: transparent; box-shadow: none; overflow: visible; }
+.sheet.dictee { flex-direction: column; gap: 18px; }
+.sheet.dictee .ligne { flex-direction: column; }
+.sheet.dictee .answer { position: static; width: min(760px, 100%); max-height: none; }
+.sheet.dictee .answer .fold { display: none; }
+.sheet.dictee .seyes { flex: 0 0 auto; width: min(760px, 100%); height: 192px; }
+.sheet.dictee .seyes input { font-size: 64px; }
 .big.retry { background: var(--paper); color: var(--ink); box-shadow: 0 4px 0 var(--line); }
 .niveaux { display: flex; gap: 10px; flex-wrap: wrap; }
 .niveaux button { min-width: 84px; min-height: 64px; border-radius: 14px; background: var(--paper); font-family: var(--display); font-weight: 800; font-size: 24px; box-shadow: 0 2px 0 var(--line); }
@@ -767,6 +794,13 @@ window.__boot = () => {
     const saisi = s.saisie[idx];
     const verdict = saisi != null ? (posee ? checkNombre(saisi, attendu) : checkMot(saisi, attendu)) : null;
     const dic = !!s.deck.dictee;
+    // La ligne de cahier : grande au centre pour la dictée, plus courte sous la feuille pour le résultat des maths.
+    // Après « Vérifier », la dictée garde le mot écrit, en lecture seule.
+    const ligneHtml = grand => `<form class="ligne" id="saisie">
+        <div class="seyes${grand ? "" : " court"}"><input id="rep" ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          placeholder="${grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? `readonly value="${esc(saisi || "")}"` : ""}></div>
+        ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}
+      </form>`;
     // Dictée : c'est juste ou à revoir, pas de « presque ».
     const grades = () => dic
       ? gradeBtn(0, "b", "À revoir") + gradeBtn(2, "g", "C'est juste !")
@@ -787,23 +821,19 @@ window.__boot = () => {
     app.innerHTML = `<div class="view">
       ${topbar}
       ${questionHtml}
-      <div class="sheet" id="sheet">
-        <canvas id="cv"></canvas>
-        <span class="placeholder" id="ph">${dic ? "Écris le mot ici…" : "Écris ta réponse ici…"}</span>
+      <div class="sheet${dic ? " dictee" : ""}" id="sheet">
+        ${dic ? ligneHtml(true) : `<canvas id="cv"></canvas>
+        <span class="placeholder" id="ph">Écris ta réponse ici…</span>
         <div class="tools">
           <button class="tool" id="undo">Annuler</button>
           <button class="tool" id="clear">Tout effacer</button>
-        </div>
+        </div>`}
         <div class="answer${verdict && !verdict.ok ? " ko" : ""}" id="ans" ${shown ? "" : "hidden"}>
           <button class="fold" id="fold">Voir ma feuille ▾</button>
           ${answerHtml}
         </div>
       </div>
-      ${attendu != null && !shown ? `<form class="saisie" id="saisie">
-        <label for="rep">${posee ? "Résultat" : "Le mot"}</label>
-        <input id="rep" ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Écris au crayon ici">
-        <button class="big g" type="submit">Vérifier</button>
-      </form>` : ""}
+      ${posee && !shown ? ligneHtml(false) : ""}
       <div class="actions" id="act">
         <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
         <div class="main" id="main">${shown && verdict
@@ -815,10 +845,10 @@ window.__boot = () => {
       </div>
     </div>`;
     s.ink[idx] ||= [];
-    const pad = drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
+    const pad = dic ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
-    document.getElementById("undo").onclick = pad.undo;
-    document.getElementById("clear").onclick = pad.clear;
+    document.getElementById("undo")?.addEventListener("click", pad.undo);
+    document.getElementById("clear")?.addEventListener("click", pad.clear);
     navBind(go);
     document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); closeCours(); keep(s); home(); };
     if (dic) {
