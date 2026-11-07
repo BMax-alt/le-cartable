@@ -1,5 +1,6 @@
 // Paquets de cartes du Cartable. Un objet par paquet, rangé par matière.
 // Carte courte : { q, r }. Carte longue : { q, r, points: [...] } (les points clés à cocher soi-même).
+// Paquet de dictée : { dictee: true, cartes: [{ mot, phrase }] }. La voix dit le mot, la phrase, puis le mot.
 // Site public : jamais d'information personnelle ici.
 window.DECKS = [
   {
@@ -48,6 +49,21 @@ window.DECKS = [
       { q: "Complète avec le bon déterminant interrogatif : « … heure est-il ? »", r: "Quelle heure est-il ? (féminin singulier)" },
       { q: "« J'ai vu un chien. Le chien courait. » Pourquoi « un », puis « le » ?", r: "Indéfini puis défini :", points: ["un : on ne connaît pas encore ce chien (article indéfini)", "le : on sait de quel chien on parle (article défini)"] },
       { q: "Genre et nombre de ces groupes nominaux : « leurs voitures », « cette école », « un oiseau »", r: "Genre et nombre :", points: ["leurs voitures : féminin pluriel", "cette école : féminin singulier", "un oiseau : masculin singulier"] }
+    ]
+  },
+  {
+    id: "dictee-essai",
+    matiere: "Dictées",
+    titre: "Dictée d'essai",
+    exemple: true,
+    dictee: true,
+    cartes: [
+      { mot: "aujourd'hui", phrase: "Aujourd'hui, il fait beau." },
+      { mot: "beaucoup", phrase: "Il y a beaucoup de livres dans la classe." },
+      { mot: "longtemps", phrase: "Nous avons attendu longtemps." },
+      { mot: "maintenant", phrase: "Maintenant, on range les cahiers." },
+      { mot: "pourtant", phrase: "Il pleut, pourtant le ciel est bleu." },
+      { mot: "quelquefois", phrase: "Quelquefois, je lis le soir." }
     ]
   }
 ];

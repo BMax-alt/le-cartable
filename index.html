@@ -171,6 +171,12 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
 .medal { width: 96px; height: 96px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 56px; box-shadow: 0 6px 0 #d99a1a; }
 .end .sub { margin: 0; font-size: 20px; color: var(--muted); max-width: 40ch; }
+/* Dictée */
+.listen { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.say { min-height: 56px; padding: 0 22px; border-radius: 14px; background: var(--pen); color: #fff; font-family: var(--display); font-weight: 800; font-size: 22px; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+.say.alt { background: var(--paper); color: var(--ink); box-shadow: 0 2px 0 var(--line); font-size: 19px; }
+.say:active { transform: translateY(3px); }
+.answer .phrase { margin: 0; font-size: 19px; color: var(--muted); line-height: 1.4; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -227,6 +233,32 @@ window.__boot = () => {
     })(t0);
   }
 
+  /* ---------- Voix de la dictée ---------- */
+  // Voix française intégrée à l'iPad (gratuite, sans serveur). Le mot, une phrase qui le contient, puis le mot.
+  const voice = {
+    v: null,
+    pick() {
+      const all = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+      const fr = all.filter(x => /^fr[-_]FR/i.test(x.lang));
+      const any = fr.length ? fr : all.filter(x => /^fr/i.test(x.lang));
+      this.v = any.find(x => /premium|enhanced|amélioré/i.test(x.name)) || any.find(x => x.localService) || any[0] || null;
+    },
+    say(parts) {
+      if (!window.speechSynthesis) return toast("La voix ne marche pas sur cet appareil.");
+      speechSynthesis.cancel();
+      if (!this.v) this.pick();
+      parts.forEach(t => {
+        const u = new SpeechSynthesisUtterance(t);
+        u.lang = "fr-FR"; if (this.v) u.voice = this.v;
+        u.rate = 0.8;
+        speechSynthesis.speak(u);
+      });
+    },
+    stop() { try { window.speechSynthesis?.cancel(); } catch (e) {} }
+  };
+  if (window.speechSynthesis) { voice.pick(); speechSynthesis.addEventListener?.("voiceschanged", () => voice.pick()); }
+  const dictate = c => voice.say(c.phrase ? [c.mot + ".", c.phrase, c.mot + "."] : [c.mot + "."]);
+
   /* ---------- Entrée par prénom ---------- */
   function who() {
     letSleep();
@@ -270,7 +302,7 @@ window.__boot = () => {
           return `<button class="deck" data-id="${esc(d.id)}">
             ${d.exemple ? '<span class="tag">Exemple</span>' : ""}
             <strong>${esc(d.titre)}</strong>
-            <span>${plural(d.cartes.length, "carte")}</span>
+            <span>${plural(d.cartes.length, d.dictee ? "mot" : "carte")}</span>
             <span class="meta">${meta}</span>
           </button>`;
         }).join("")}</div>
@@ -308,6 +340,20 @@ window.__boot = () => {
       return `<button class="dot ${st} ${k === s.pos ? "cur" : ""}" data-k="${k}" aria-label="Carte ${k + 1}">${k + 1}</button>`;
     }).join("");
     const gradeBtn = (v, cls, label) => `<button class="big ${cls} ${g === v ? "picked" : ""}" data-v="${v}">${label}</button>`;
+    const dic = !!s.deck.dictee;
+    // Dictée : c'est juste ou à revoir, pas de « presque ».
+    const grades = () => dic
+      ? gradeBtn(0, "b", "À revoir") + gradeBtn(2, "g", "C'est juste !")
+      : gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
+    const questionHtml = dic
+      ? `<div class="question"><small>Dictée · mot ${s.pos + 1}</small><p>Écoute bien, puis écris le mot.</p>
+          <div class="listen"><button class="say" id="say">🔊 Écouter</button><button class="say alt" id="sayword">Le mot seul</button></div></div>`
+      : `<div class="question"><small>${c.points ? "Question longue" : "Question"}</small><p>${esc(c.q)}</p></div>`;
+    const answerHtml = dic
+      ? `<small>Le mot</small><p class="r">${esc(c.mot)}</p>${c.phrase ? `<p class="phrase">${esc(c.phrase)}</p>` : ""}`
+      : `<small>La réponse</small>
+          <p class="r">${esc(c.r)}</p>
+          ${c.points ? `<ul id="pts">${c.points.map(p => `<li><button><span class="box">✓</span><span>${esc(p)}</span></button></li>`).join("")}</ul>` : ""}`;
     app.innerHTML = `<div class="view">
       <div class="topbar">
         <button class="back" id="quit">← Mes leçons</button>
@@ -316,45 +362,49 @@ window.__boot = () => {
           <div class="dots" id="dots">${dots}</div>
         </div>
       </div>
-      <div class="question"><small>${c.points ? "Question longue" : "Question"}</small><p>${esc(c.q)}</p></div>
+      ${questionHtml}
       <div class="sheet" id="sheet">
         <canvas id="cv"></canvas>
-        <span class="placeholder" id="ph">Écris ta réponse ici…</span>
+        <span class="placeholder" id="ph">${dic ? "Écris le mot ici…" : "Écris ta réponse ici…"}</span>
         <div class="tools">
           <button class="tool" id="undo">Annuler</button>
           <button class="tool" id="clear">Tout effacer</button>
         </div>
         <div class="answer" id="ans" ${shown ? "" : "hidden"}>
-          <small>La réponse</small>
-          <p class="r">${esc(c.r)}</p>
-          ${c.points ? `<ul id="pts">${c.points.map(p => `<li><button><span class="box">✓</span><span>${esc(p)}</span></button></li>`).join("")}</ul>` : ""}
+          ${answerHtml}
         </div>
       </div>
       <div class="actions" id="act">
         <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
         <div class="main" id="main">${shown
-          ? gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !")
-          : '<button class="big reveal" id="show">Voir la réponse</button>'}</div>
+          ? grades()
+          : `<button class="big reveal" id="show">${dic ? "Voir le mot" : "Voir la réponse"}</button>`}</div>
         <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
       </div>
     </div>`;
     s.ink[idx] ||= [];
     const pad = drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
-    const go = k => { pad.stop(); s.pos = k; card(s); };
+    const go = k => { pad.stop(); voice.stop(); s.pos = k; card(s); };
     document.getElementById("undo").onclick = pad.undo;
     document.getElementById("clear").onclick = pad.clear;
-    document.getElementById("quit").onclick = () => { pad.stop(); home(); };
+    document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); home(); };
+    if (dic) {
+      document.getElementById("say").onclick = () => dictate(c);
+      document.getElementById("sayword").onclick = () => voice.say([c.mot + "."]);
+      // Le mot est dit tout seul en arrivant sur une carte pas encore vue (l'iPad l'autorise après le premier toucher).
+      if (!shown) dictate(c);
+    }
     document.getElementById("prev").onclick = () => s.pos > 0 && go(s.pos - 1);
     document.getElementById("next").onclick = () => s.pos < s.order.length - 1 && go(s.pos + 1);
     document.querySelectorAll("#dots .dot").forEach(b => b.onclick = () => go(+b.dataset.k));
     document.querySelector("#dots .cur")?.scrollIntoView({ block: "nearest", inline: "center" });
     const bindPoints = () => document.querySelectorAll("#pts li button").forEach(b => b.onclick = () => b.parentElement.classList.toggle("on"));
-    const bindGrades = () => document.querySelectorAll("#main .big[data-v]").forEach(b => b.onclick = () => { pad.stop(); grade(s, idx, +b.dataset.v); });
+    const bindGrades = () => document.querySelectorAll("#main .big[data-v]").forEach(b => b.onclick = () => { pad.stop(); voice.stop(); grade(s, idx, +b.dataset.v); });
     if (shown) { bindPoints(); bindGrades(); }
     else document.getElementById("show").onclick = () => {
       s.shown[idx] = true;
       document.getElementById("ans").hidden = false;
-      document.getElementById("main").innerHTML = gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
+      document.getElementById("main").innerHTML = grades();
       bindPoints(); bindGrades();
     };
   }
@@ -410,7 +460,7 @@ window.__boot = () => {
       <h2>${esc(title)}</h2>
       <p class="sub">${sub}</p>
       <p class="score"><b>${firstOk}</b> sur ${s.total} du premier coup.</p>
-      ${hard.length ? `<p class="hint">Les cartes qui t'ont demandé un effort :</p><ul class="review">${hard.map(i => `<li><span>${esc(s.deck.cartes[i].q)}</span></li>`).join("")}</ul>` : ""}
+      ${hard.length ? `<p class="hint">Les cartes qui t'ont demandé un effort :</p><ul class="review">${hard.map(i => { const k = s.deck.cartes[i]; return `<li><span>${esc(s.deck.dictee ? k.mot : k.q)}</span></li>`; }).join("")}</ul>` : ""}
       <div class="actions">
         ${hard.length ? '<button class="big m" id="hard">Revoir ces cartes</button>' : ""}
         <button class="big g" id="again">Tout recommencer</button>
