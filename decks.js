@@ -48,7 +48,20 @@ window.DECKS = [
       { q: "Que désignent les déterminants possessifs ?", r: "Celui qui possède, celui qui a" },
       { q: "Déterminants possessifs : mon, ton, son au masculin singulier. Quels sont-ils au féminin singulier ?", r: "ma, ta, sa" },
       { q: "Quel est le pluriel de mon, ton, son ?", r: "mes, tes, ses" },
-      { q: "Quel est le pluriel de notre, votre, leur ?", r: "nos, vos, leurs" }
+      { q: "Quel est le pluriel de notre, votre, leur ?", r: "nos, vos, leurs" },
+      { q: "Quels sont les déterminants démonstratifs ?", r: "Les démonstratifs :", points: ["Masculin singulier : ce / cet", "Féminin singulier : cette", "Pluriel : ces"] },
+      { q: "Quand écrit-on « cet » au lieu de « ce » ?", r: "Devant un nom masculin qui commence par une voyelle ou un h muet : cet arbre, cet homme" },
+      { q: "Que montrent les déterminants démonstratifs ?", r: "Un être ou une chose précise, que l'on montre : cette voiture" },
+      { q: "Quels sont les déterminants interrogatifs ?", r: "Les interrogatifs :", points: ["Masculin singulier : quel", "Féminin singulier : quelle", "Masculin pluriel : quels", "Féminin pluriel : quelles"] },
+      { q: "Les déterminants exclamatifs ont les mêmes formes que quels autres déterminants ?", r: "Les déterminants interrogatifs : quel, quels, quelle, quelles. Exemple : Quelle chance !" },
+      { q: "Donne deux déterminants indéfinis.", r: "Par exemple : certain, aucun (ou chaque)" },
+      { q: "Qu'indiquent les déterminants numéraux cardinaux ?", r: "La quantité : un, deux, douze…" },
+      { q: "Qu'indiquent les déterminants numéraux ordinaux ?", r: "L'ordre, le rang : premier, second, douzième…" },
+      { q: "Où se place le déterminant ?", r: "Devant le nom" },
+      { q: "À quoi sert le déterminant ?", r: "Il sert à :", points: ["Introduire le nom dans la phrase", "Indiquer le genre et le nombre du nom"] },
+      { q: "Comment savoir si un groupe nominal est masculin ou féminin ?", r: "On essaie un déterminant devant le nom :", points: ["Si on peut mettre « le » ou « un » : masculin", "Si on peut mettre « la » ou « une » : féminin"] },
+      { q: "Que nous apprend un déterminant singulier ? Et un déterminant pluriel ?", r: "Singulier ou pluriel :", points: ["Singulier : une seule chose ou une seule personne (mon cousin)", "Pluriel : plusieurs choses ou plusieurs personnes (mes cousins)"] },
+      { q: "Quelle est la différence entre « la voiture » et « une voiture » ?", r: "Défini ou indéfini :", points: ["la (article défini) : une chose que l'on connaît", "une (article indéfini) : une chose que l'on ne connaît pas"] }
     ]
   }
 ];
