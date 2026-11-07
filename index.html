@@ -257,7 +257,9 @@ window.__boot = () => {
     stop() { try { window.speechSynthesis?.cancel(); } catch (e) {} }
   };
   if (window.speechSynthesis) { voice.pick(); speechSynthesis.addEventListener?.("voiceschanged", () => voice.pick()); }
-  const dictate = c => voice.say(c.phrase ? [c.mot + ".", c.phrase, c.mot + "."] : [c.mot + "."]);
+  // Par défaut, le mot seul. La phrase d'exemple seulement si l'enfant la demande.
+  const dictate = c => voice.say([c.mot + "."]);
+  const sayPhrase = c => voice.say([c.phrase, c.mot + "."]);
 
   /* ---------- Entrée par prénom ---------- */
   function who() {
@@ -347,10 +349,10 @@ window.__boot = () => {
       : gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
     const questionHtml = dic
       ? `<div class="question"><small>Dictée · mot ${s.pos + 1}</small><p>Écoute bien, puis écris le mot.</p>
-          <div class="listen"><button class="say" id="say">🔊 Écouter</button><button class="say alt" id="sayword">Le mot seul</button></div></div>`
+          <div class="listen"><button class="say" id="say">🔊 Écouter</button>${c.phrase ? '<button class="say alt" id="sayphrase">Une phrase d\'exemple</button>' : ""}</div></div>`
       : `<div class="question"><small>${c.points ? "Question longue" : "Question"}</small><p>${esc(c.q)}</p></div>`;
     const answerHtml = dic
-      ? `<small>Le mot</small><p class="r">${esc(c.mot)}</p>${c.phrase ? `<p class="phrase">${esc(c.phrase)}</p>` : ""}`
+      ? `<small>Le mot</small><p class="r">${esc(c.mot)}</p>`
       : `<small>La réponse</small>
           <p class="r">${esc(c.r)}</p>
           ${c.points ? `<ul id="pts">${c.points.map(p => `<li><button><span class="box">✓</span><span>${esc(p)}</span></button></li>`).join("")}</ul>` : ""}`;
@@ -390,7 +392,7 @@ window.__boot = () => {
     document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); home(); };
     if (dic) {
       document.getElementById("say").onclick = () => dictate(c);
-      document.getElementById("sayword").onclick = () => voice.say([c.mot + "."]);
+      if (c.phrase) document.getElementById("sayphrase").onclick = () => sayPhrase(c);
       // Le mot est dit tout seul en arrivant sur une carte pas encore vue (l'iPad l'autorise après le premier toucher).
       if (!shown) dictate(c);
     }

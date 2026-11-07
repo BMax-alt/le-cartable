@@ -1,6 +1,6 @@
 // Paquets de cartes du Cartable. Un objet par paquet, rangé par matière.
 // Carte courte : { q, r }. Carte longue : { q, r, points: [...] } (les points clés à cocher soi-même).
-// Paquet de dictée : { dictee: true, cartes: [{ mot, phrase }] }. La voix dit le mot, la phrase, puis le mot.
+// Paquet de dictée : { dictee: true, cartes: [{ mot, phrase }] }. La voix dit le mot seul ; la phrase seulement si l'enfant la demande.
 // Site public : jamais d'information personnelle ici.
 window.DECKS = [
   {
