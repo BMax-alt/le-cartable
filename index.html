@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-title" content="Le Cartable">
+<style>*,*::before,*::after{box-sizing:border-box}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>Le Cartable</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Grandstander:wght@600;800&display=swap">
+<style>
+/* Un cahier d'écolier : page Seyès plein écran pour écrire, cartes posées dessus comme des étiquettes. Monde unique et clair, volontairement. */
+:root {
+  color-scheme: light;
+  --paper: #fbfcff;
+  --desk: #e9eef7;
+  --ink: #1d2b4f;
+  --pen: #1f3fa6;
+  --seyes-thin: #c9d6f2;
+  --seyes-thick: #9fb3e3;
+  --margin-red: #e2696b;
+  --accent: #f2b632;
+  --accent-ink: #4a3300;
+  --muted: #5c6a8a;
+  --good: #2f9a5d;
+  --mid: #e08a1e;
+  --bad: #d4484b;
+  --label: #fff6d9;
+  --line: #d5dcec;
+  --display: "Grandstander", "Chalkboard SE", "Comic Sans MS", system-ui, sans-serif;
+  --body: "Andika", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+html, body { height: 100%; }
+body {
+  background: var(--desk);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 18px;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
+.app {
+  height: 100%;
+  display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+  box-sizing: border-box;
+  gap: 12px;
+}
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+
+/* Accueil */
+.home { overflow-y: auto; gap: 28px; padding-block: 16px; max-width: 900px; width: 100%; margin: 0 auto; }
+.brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.brand h1 { font-family: var(--display); font-weight: 800; font-size: clamp(36px, 6vw, 56px); margin: 0; letter-spacing: -0.01em; }
+.brand p { margin: 0; color: var(--muted); }
+.matiere h2 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.deck {
+  text-align: left; background: var(--paper); border-radius: 14px; padding: 20px 20px 18px 34px;
+  box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08);
+  position: relative; display: flex; flex-direction: column; gap: 8px; min-height: 140px;
+}
+.deck::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 2px; background: var(--margin-red); opacity: .7; }
+.deck strong { font-family: var(--display); font-size: 24px; font-weight: 800; line-height: 1.15; }
+.deck .meta { color: var(--muted); font-size: 16px; margin-top: auto; }
+.tag { align-self: flex-start; background: var(--label); color: var(--accent-ink); font-size: 14px; padding: 2px 10px; border-radius: 99px; border: 1px dashed var(--accent); }
+.hint { color: var(--muted); font-size: 16px; max-width: 60ch; line-height: 1.5; }
+
+/* Séance */
+.topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.back { font-size: 17px; padding: 10px 14px; border-radius: 10px; background: var(--paper); box-shadow: 0 1px 0 var(--line); }
+.progress { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 4px; }
+.progress .txt { font-size: 15px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.bar { height: 10px; background: var(--paper); border-radius: 99px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.bar i { display: block; height: 100%; background: var(--good); border-radius: 99px; transition: width .3s; }
+.question {
+  background: var(--label); border-radius: 14px; padding: 18px 22px;
+  box-shadow: 0 2px 0 #eadba8; display: flex; flex-direction: column; gap: 6px;
+}
+.question small { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-ink); opacity: .75; }
+.question p { margin: 0; font-family: var(--display); font-weight: 600; font-size: clamp(22px, 3.2vw, 32px); line-height: 1.25; text-wrap: balance; }
+.sheet {
+  flex: 1; min-height: 200px; position: relative; border-radius: 14px; overflow: hidden;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(90deg, transparent 63px, var(--margin-red) 63px, var(--margin-red) 65px, transparent 65px),
+    linear-gradient(90deg, var(--seyes-thin) 1px, transparent 1px),
+    linear-gradient(var(--seyes-thick) 1.5px, transparent 1.5px),
+    linear-gradient(var(--seyes-thin) 1px, transparent 1px);
+  background-size: 100% 100%, 48px 100%, 100% 48px, 100% 12px;
+  background-position: 0 0, 65px 0, 0 47px, 0 11px;
+  box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08);
+}
+.sheet canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.sheet .placeholder { position: absolute; left: 84px; top: 58px; color: var(--muted); opacity: .55; font-size: 20px; pointer-events: none; transition: opacity .2s; }
+.tools { position: absolute; right: 12px; top: 12px; display: flex; gap: 8px; }
+.tool { background: rgba(255,255,255,.92); border-radius: 10px; padding: 8px 14px; font-size: 16px; box-shadow: 0 1px 0 var(--line), 0 2px 8px rgba(29,43,79,.1); }
+.answer {
+  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 55%; overflow-y: auto;
+  background: #ffffff; border-radius: 14px; padding: 18px 22px; border: 2px solid var(--good);
+  box-shadow: 0 8px 28px rgba(29,43,79,.18); display: flex; flex-direction: column; gap: 10px;
+  user-select: text; -webkit-user-select: text;
+}
+.answer small { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--good); font-weight: 700; }
+.answer .r { font-family: var(--display); font-weight: 600; font-size: clamp(22px, 3vw, 30px); margin: 0; line-height: 1.25; }
+.answer ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.answer li button { display: flex; gap: 12px; align-items: flex-start; text-align: left; font-size: 19px; line-height: 1.35; padding: 4px 0; width: 100%; }
+.answer li .box { flex: none; width: 26px; height: 26px; border-radius: 6px; border: 2px solid var(--muted); display: grid; place-items: center; font-weight: 700; color: #fff; margin-top: 1px; }
+.answer li.on .box { background: var(--good); border-color: var(--good); }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.big {
+  flex: 1; min-width: 150px; min-height: 64px; border-radius: 14px; font-family: var(--display); font-weight: 800; font-size: 22px;
+  box-shadow: 0 4px 0 rgba(0,0,0,.18); transition: transform .08s;
+}
+.big:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
+.reveal { background: var(--accent); color: var(--accent-ink); }
+.g { background: var(--good); color: #fff; }
+.m { background: var(--mid); color: #fff; }
+.b { background: var(--bad); color: #fff; }
+
+/* Fin */
+.end { overflow-y: auto; align-items: center; justify-content: center; text-align: center; gap: 20px; padding-block: 24px; }
+.end h2 { font-family: var(--display); font-weight: 800; font-size: clamp(34px, 6vw, 54px); margin: 0; }
+.score { font-size: 22px; margin: 0; }
+.score b { font-family: var(--display); font-size: 1.4em; color: var(--good); font-variant-numeric: tabular-nums; }
+.review { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-width: 640px; width: 100%; text-align: left; }
+.review li { background: var(--paper); border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; gap: 12px; box-shadow: 0 1px 0 var(--line); }
+.review li span:last-child { color: var(--muted); white-space: nowrap; font-size: 16px; }
+.end .actions { justify-content: center; max-width: 720px; width: 100%; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script src="decks.js"></script>
+<script>
+(() => {
+  const DECKS = Array.isArray(window.DECKS) ? window.DECKS : [];
+  const app = document.getElementById("app");
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem("cartable:" + k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem("cartable:" + k, JSON.stringify(v)); } catch (e) {} }
+  };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const plural = (n, w) => n + " " + w + (n > 1 ? "s" : "");
+  let wakeLock = null;
+  const keepAwake = async () => { try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) {} };
+  const letSleep = () => { try { wakeLock?.release(); } catch (e) {} wakeLock = null; };
+
+  /* ---------- Accueil ---------- */
+  function home() {
+    letSleep();
+    const byMatiere = {};
+    DECKS.forEach(d => (byMatiere[d.matiere] ||= []).push(d));
+    const groups = Object.keys(byMatiere).map(m => `
+      <section class="matiere">
+        <h2>${esc(m)}</h2>
+        <div class="decks">${byMatiere[m].map(d => {
+          const last = store.get("deck:" + d.id);
+          const meta = last ? `Dernière fois : ${last.first}/${last.total} du premier coup` : "Pas encore révisé";
+          return `<button class="deck" data-id="${esc(d.id)}">
+            ${d.exemple ? '<span class="tag">Exemple</span>' : ""}
+            <strong>${esc(d.titre)}</strong>
+            <span>${plural(d.cartes.length, "carte")}</span>
+            <span class="meta">${meta}</span>
+          </button>`;
+        }).join("")}</div>
+      </section>`).join("");
+    app.innerHTML = `<div class="view home">
+      <div class="brand"><h1>Le Cartable</h1><p>Choisis une leçon et écris tes réponses au crayon.</p></div>
+      ${groups || '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
+      ${DECKS.some(d => d.exemple) ? '<p class="hint">Les paquets marqués « Exemple » servent à essayer l\'app. Les vraies cartes de la leçon arrivent bientôt.</p>' : ""}
+    </div>`;
+    app.querySelectorAll(".deck").forEach(b => b.addEventListener("click", () => {
+      const d = DECKS.find(x => x.id === b.dataset.id);
+      start(d, d.cartes.map((_, i) => i));
+    }));
+  }
+
+  /* ---------- Séance ---------- */
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  function start(deck, indices) {
+    keepAwake();
+    const s = {
+      deck, queue: shuffle(indices.slice()), total: indices.length, done: 0,
+      tries: {}, firstOk: 0, partial: indices.length !== deck.cartes.length
+    };
+    card(s);
+  }
+
+  function card(s) {
+    if (!s.queue.length) return end(s);
+    const idx = s.queue[0];
+    const c = s.deck.cartes[idx];
+    const pct = Math.round(100 * s.done / s.total);
+    app.innerHTML = `<div class="view">
+      <div class="topbar">
+        <button class="back" id="quit">← Mes leçons</button>
+        <div class="progress">
+          <div class="txt"><span>${esc(s.deck.titre)}</span><span>${s.done}/${s.total} sues</span></div>
+          <div class="bar"><i style="width:${pct}%"></i></div>
+        </div>
+      </div>
+      <div class="question"><small>${c.points ? "Question longue" : "Question"}</small><p>${esc(c.q)}</p></div>
+      <div class="sheet" id="sheet">
+        <canvas id="cv"></canvas>
+        <span class="placeholder" id="ph">Écris ta réponse ici…</span>
+        <div class="tools">
+          <button class="tool" id="undo">Annuler</button>
+          <button class="tool" id="clear">Tout effacer</button>
+        </div>
+        <div class="answer" id="ans" hidden>
+          <small>La réponse</small>
+          <p class="r">${esc(c.r)}</p>
+          ${c.points ? `<ul id="pts">${c.points.map(p => `<li><button><span class="box">✓</span><span>${esc(p)}</span></button></li>`).join("")}</ul>` : ""}
+        </div>
+      </div>
+      <div class="actions" id="act">
+        <button class="big reveal" id="show">Voir la réponse</button>
+      </div>
+    </div>`;
+    const pad = drawPad(document.getElementById("cv"), document.getElementById("ph"));
+    document.getElementById("undo").onclick = pad.undo;
+    document.getElementById("clear").onclick = pad.clear;
+    document.getElementById("quit").onclick = () => { pad.stop(); home(); };
+    document.getElementById("show").onclick = () => {
+      document.getElementById("ans").hidden = false;
+      document.querySelectorAll("#pts li button").forEach(b => b.onclick = () => b.parentElement.classList.toggle("on"));
+      document.getElementById("act").innerHTML = `
+        <button class="big b" data-v="0">À revoir</button>
+        <button class="big m" data-v="1">Presque</button>
+        <button class="big g" data-v="2">Je savais !</button>`;
+      document.querySelectorAll("#act .big").forEach(b => b.onclick = () => { pad.stop(); grade(s, idx, +b.dataset.v); });
+    };
+  }
+
+  function grade(s, idx, v) {
+    s.queue.shift();
+    const n = (s.tries[idx] = (s.tries[idx] || 0) + 1);
+    if (v === 2) { s.done++; if (n === 1) s.firstOk++; }
+    else if (v === 1) s.queue.push(idx);
+    else s.queue.splice(Math.min(2, s.queue.length), 0, idx);
+    card(s);
+  }
+
+  function end(s) {
+    letSleep();
+    if (!s.partial) store.set("deck:" + s.deck.id, { first: s.firstOk, total: s.total, date: new Date().toISOString().slice(0, 10) });
+    const hard = Object.keys(s.tries).filter(i => s.tries[i] > 1).map(Number);
+    const msg = s.firstOk === s.total ? "Parfait !" : s.firstOk >= s.total / 2 ? "Bravo !" : "Bien joué, on continue !";
+    app.innerHTML = `<div class="view end">
+      <h2>${msg}</h2>
+      <p class="score"><b>${s.firstOk}</b> sur ${s.total} du premier coup.</p>
+      ${hard.length ? `<ul class="review">${hard.map(i => `<li><span>${esc(s.deck.cartes[i].q)}</span><span>vue ${s.tries[i]} fois</span></li>`).join("")}</ul>` : ""}
+      <div class="actions">
+        ${hard.length ? '<button class="big m" id="hard">Revoir les difficiles</button>' : ""}
+        <button class="big g" id="again">Tout recommencer</button>
+        <button class="big reveal" id="home">Mes leçons</button>
+      </div>
+    </div>`;
+    document.getElementById("again").onclick = () => start(s.deck, s.deck.cartes.map((_, i) => i));
+    document.getElementById("home").onclick = home;
+    if (hard.length) document.getElementById("hard").onclick = () => start(s.deck, hard);
+  }
+
+  /* ---------- Zone d'écriture au crayon ---------- */
+  function drawPad(cv, ph) {
+    const ctx = cv.getContext("2d");
+    const strokes = [];
+    let current = null, penSeen = false, w = 0, h = 0;
+    const ink = getComputedStyle(document.documentElement).getPropertyValue("--pen").trim() || "#1f3fa6";
+
+    function size() {
+      const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      w = r.width; h = r.height;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      redraw();
+    }
+    function seg(a, b) {
+      ctx.lineWidth = 1.2 + 3.2 * ((a.p + b.p) / 2);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    function redraw() {
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = ink; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (const st of strokes) {
+        if (st.length === 1) { ctx.beginPath(); ctx.arc(st[0].x, st[0].y, 1.6, 0, 7); ctx.fillStyle = ink; ctx.fill(); }
+        for (let i = 1; i < st.length; i++) seg(st[i - 1], st[i]);
+      }
+      ph.style.opacity = strokes.length ? 0 : "";
+    }
+    const pt = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pointerType === "pen" ? (e.pressure || 0.5) : 0.5 }; };
+    const allowed = e => { if (e.pointerType === "pen") penSeen = true; return !(penSeen && e.pointerType === "touch"); };
+
+    cv.addEventListener("pointerdown", e => {
+      if (!allowed(e)) return;
+      e.preventDefault(); cv.setPointerCapture(e.pointerId);
+      current = [pt(e)]; strokes.push(current); redraw();
+    });
+    cv.addEventListener("pointermove", e => {
+      if (!current || !allowed(e)) return;
+      e.preventDefault();
+      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      ctx.strokeStyle = ink; ctx.lineCap = "round";
+      for (const ce of evs) { const p = pt(ce); seg(current[current.length - 1], p); current.push(p); }
+    });
+    const up = () => { current = null; };
+    cv.addEventListener("pointerup", up);
+    cv.addEventListener("pointercancel", up);
+    const ro = new ResizeObserver(size); ro.observe(cv);
+    size();
+    return {
+      undo() { strokes.pop(); redraw(); },
+      clear() { strokes.length = 0; redraw(); },
+      stop() { ro.disconnect(); }
+    };
+  }
+
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && document.querySelector(".sheet")) keepAwake(); });
+  home();
+})();
+</script>
+</body>
+</html>
