@@ -52,18 +52,59 @@ window.DECKS = [
     ]
   },
   {
-    id: "dictee-essai",
+    id: "dictee-07-jaune",
     matiere: "Dictées",
-    titre: "Dictée d'essai",
-    exemple: true,
+    titre: "Dictée 7 · Léonard de Vinci · Groupe jaune",
     dictee: true,
     cartes: [
-      { mot: "aujourd'hui", phrase: "Aujourd'hui, il fait beau." },
-      { mot: "beaucoup", phrase: "Il y a beaucoup de livres dans la classe." },
-      { mot: "longtemps", phrase: "Nous avons attendu longtemps." },
-      { mot: "maintenant", phrase: "Maintenant, on range les cahiers." },
-      { mot: "pourtant", phrase: "Il pleut, pourtant le ciel est bleu." },
-      { mot: "quelquefois", phrase: "Quelquefois, je lis le soir." }
+      { mot: "un génie", phrase: "Léonard de Vinci était un génie." },
+      { mot: "le symbole", phrase: "La colombe est le symbole de la paix." },
+      { mot: "un peintre", phrase: "Le peintre mélange ses couleurs." },
+      { mot: "un sculpteur", phrase: "Le sculpteur taille la pierre." },
+      { mot: "un inventeur", phrase: "Un inventeur imagine des machines nouvelles." },
+      { mot: "un architecte", phrase: "L'architecte dessine les plans de la maison." },
+      { mot: "une œuvre", phrase: "La Joconde est une œuvre de Léonard de Vinci." },
+      { mot: "le musée", phrase: "La Joconde est exposée au musée du Louvre." },
+      { mot: "considérer", phrase: "Il faut considérer toutes les idées." },
+      { mot: "conserver", phrase: "Le musée conserve des tableaux très anciens." },
+      { mot: "célèbre", phrase: "La Joconde est un tableau célèbre." },
+      { mot: "immense", phrase: "Le château est immense." },
+      { mot: "Léonard de Vinci", phrase: "Léonard de Vinci est né en 1452." },
+      { mot: "Italie", phrase: "Léonard de Vinci est né en Italie." },
+      { mot: "la Renaissance", phrase: "Léonard de Vinci a vécu à la Renaissance." }
+    ]
+  },
+  {
+    id: "dictee-07-vert",
+    matiere: "Dictées",
+    titre: "Dictée 7 · Léonard de Vinci · Groupe vert",
+    dictee: true,
+    cartes: [
+      { mot: "une invention", phrase: "Cette invention a changé le monde." },
+      { mot: "l'ébauche", phrase: "Le peintre fait une ébauche avant de peindre son tableau." },
+      { mot: "un atelier", phrase: "Le peintre travaille dans son atelier." },
+      { mot: "un appareil", phrase: "Léonard a dessiné un appareil pour voler." },
+      { mot: "la plongée", phrase: "Il a aussi imaginé un équipement pour la plongée." },
+      { mot: "concevoir", phrase: "Les ingénieurs savent concevoir des ponts." },
+      { mot: "créer", phrase: "J'aime créer des dessins." },
+      { mot: "étonnant, étonnante", phrase: "Ce tour de magie est étonnant. Cette histoire est étonnante." },
+      { mot: "mécanique", phrase: "Ce jouet mécanique avance tout seul." }
+    ]
+  },
+  {
+    id: "dictee-07-violet",
+    matiere: "Dictées",
+    titre: "Dictée 7 · Léonard de Vinci · Groupe violet",
+    dictee: true,
+    cartes: [
+      { mot: "une idée", phrase: "J'ai une bonne idée !" },
+      { mot: "un carnet", phrase: "Léonard notait tout dans ses carnets." },
+      { mot: "un schéma", phrase: "Le schéma montre comment marche la machine." },
+      { mot: "le gout", phrase: "Ce gâteau a le gout du chocolat." },
+      { mot: "le secret", phrase: "Garde bien ce secret !" },
+      { mot: "l'envers", phrase: "Dans ses carnets, il écrivait souvent à l'envers, comme dans un miroir." },
+      { mot: "archiver", phrase: "On range et on archive les vieux documents." },
+      { mot: "déchiffrer", phrase: "Il faut un miroir pour déchiffrer son écriture." }
     ]
   }
 ];
