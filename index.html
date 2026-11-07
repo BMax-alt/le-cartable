@@ -236,12 +236,12 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
   background-position: 0 0, 0 47px, 0 11px;
   box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08); border: 2px solid var(--line); }
 .seyes:focus-within { border-color: var(--pen); }
-.seyes input { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; padding: 0 20px 0 84px;
+.seyes input { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 100%; border: 0; background: transparent; padding: 0 20px 0 84px;
   font-family: var(--body); font-size: 54px; line-height: 1; color: var(--pen); -webkit-user-select: text; user-select: text; }
 .seyes input:focus { outline: none; }
 .seyes input::placeholder { color: var(--muted); opacity: .45; font-size: 26px; }
 .seyes input[readonly] { color: var(--ink); }
-.seyes.court { height: 96px; flex-basis: 360px; max-width: 520px; }
+.seyes.court { height: 120px; flex-basis: 360px; max-width: 520px; }
 .seyes.court input { font-size: 44px; }
 .ligne .big { flex: 0 0 auto; min-width: 180px; }
 .sheet.dictee { display: flex; align-items: center; justify-content: center; padding: 24px 24px 24px 24px; background-image: none; background-color: transparent; box-shadow: none; overflow: visible; }
@@ -517,6 +517,30 @@ window.__boot = () => {
     }).join("");
     return { html: `<div class="pose" aria-label="${esc(nums.join(" " + op + " "))}">${html}</div>`, r: S.r };
   }
+
+  /* ---------- Ligne de cahier : le texte posé sur une grosse ligne ---------- */
+  // Les grosses lignes Seyès tombent à y = 47, 95, 143… (une tous les 48 px). On mesure la police pour que
+  // la ligne de base du texte (le pied des lettres) se pose sur la dernière grosse ligne de la case.
+  function alignLigne() {
+    document.querySelectorAll(".seyes input").forEach(inp => {
+      const box = inp.parentElement, H = box.clientHeight;
+      const size = parseFloat(getComputedStyle(inp).fontSize);
+      const fam = getComputedStyle(inp).fontFamily;
+      let A = size * 0.95, D = size * 0.3;
+      try {
+        const ctx = document.createElement("canvas").getContext("2d");
+        ctx.font = size + "px " + fam;
+        const m = ctx.measureText("Hg");
+        if (m.fontBoundingBoxAscent) { A = m.fontBoundingBoxAscent; D = m.fontBoundingBoxDescent; }
+      } catch (e) {}
+      const L = Math.ceil(A + D) + 4;                     // hauteur de la bande de texte
+      const baseInBand = (L - (A + D)) / 2 + A;           // position de la ligne de base dans la bande
+      let thick = 47; while (thick + 48 <= H - D * 0.6) thick += 48; // dernière grosse ligne qui laisse la place aux jambages
+      Object.assign(inp.style, { height: L + "px", lineHeight: L + "px", top: Math.round(thick + 0.75 - baseInBand) + "px" });
+    });
+  }
+  try { document.fonts?.ready.then(alignLigne); } catch (e) {}
+  addEventListener("resize", alignLigne);
 
   /* ---------- Correction automatique (comparaison simple, sans IA) ---------- */
   function checkNombre(saisi, attendu) {
@@ -844,6 +868,7 @@ window.__boot = () => {
         <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
       </div>
     </div>`;
+    alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
     const pad = dic ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
