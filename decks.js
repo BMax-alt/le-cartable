@@ -19,7 +19,7 @@ window.DECKS = [
       { q: "Pourquoi ont-ils pris la Bastille ?", r: "Pour prendre des armes" },
       { q: "Que votent les députés pour rétablir l'égalité entre les différents ordres de la société française ?", r: "L'abolition des privilèges" },
       { q: "Quel texte très important votent-ils 3 semaines plus tard ?", r: "La Déclaration des droits de l'homme et du citoyen" },
-      { q: "Quand la famille royale est-elle ramenée aux Tuileries ?", r: "En octobre 1789" },
+      { q: "Quand la famille royale est-elle ramenée aux Tuileries ?", r: "En octobre 1789 (le 6 octobre)" },
       { q: "Où et quand le roi est-il arrêté ?", r: "Le roi est arrêté :", points: ["À Varennes", "Le 21 juin 1791"] },
       { q: "Quand la Marseillaise est-elle devenue l'hymne national ?", r: "En 1879" },
       { q: "Quand le roi a-t-il été guillotiné ?", r: "Le 21 janvier 1793" },
