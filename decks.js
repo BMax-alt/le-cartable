@@ -44,7 +44,7 @@ window.DECKS = [
       { q: "« Des » peut être deux sortes d'article. Lesquelles ?", r: "Deux sortes :", points: ["Article indéfini : des romains", "Article contracté (de + les) : des gens"] },
       { q: "Comment appelle-t-on le petit mot qui précède et précise le nom commun ?", r: "Le déterminant" },
       { q: "Quels renseignements le déterminant donne-t-il sur le nom ?", r: "Trois renseignements :", points: ["Le genre (masculin / féminin)", "Le nombre (singulier / pluriel)", "L'appartenance"] },
-      { q: "Mon chien, ce chien, chaque chien : quel type de déterminant est souligné à chaque fois ?", r: "Trois types :", points: ["mon : possessif", "ce : démonstratif", "chaque : indéfini"] },
+      { q: "Dans « mon chien », « ce chien », « chaque chien », de quel type est chaque déterminant ?", r: "Trois types :", points: ["mon : possessif", "ce : démonstratif", "chaque : indéfini"] },
       { q: "Que désignent les déterminants possessifs ?", r: "Celui qui possède, celui qui a" },
       { q: "Déterminants possessifs : mon, ton, son au masculin singulier. Quels sont-ils au féminin singulier ?", r: "ma, ta, sa" },
       { q: "Quel est le pluriel de mon, ton, son ?", r: "mes, tes, ses" },
