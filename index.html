@@ -218,6 +218,17 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .saisie input:focus { outline: none; border-color: var(--pen); }
 .saisie .big { flex: 0 1 200px; }
 .answer.ko { border-color: var(--bad); }
+/* La correction se pose à droite et se replie : la feuille de l'enfant reste visible. */
+@media (min-width: 900px) { .answer { left: auto; width: min(480px, 46%); max-height: calc(100% - 72px); } }
+.answer .fold { align-self: flex-end; margin: -6px -8px 0 0; background: var(--desk); border-radius: 10px; padding: 6px 12px; font-size: 16px; }
+.answer.mini { max-height: none; gap: 0; padding: 10px 14px; }
+.answer.mini > :not(.fold) { display: none; }
+.answer.mini .fold { margin: 0; align-self: stretch; text-align: center; background: none; font-weight: 700; color: var(--pen); }
+.big.retry { background: var(--paper); color: var(--ink); box-shadow: 0 4px 0 var(--line); }
+.niveaux { display: flex; gap: 10px; flex-wrap: wrap; }
+.niveaux button { min-width: 84px; min-height: 64px; border-radius: 14px; background: var(--paper); font-family: var(--display); font-weight: 800; font-size: 24px; box-shadow: 0 2px 0 var(--line); }
+.niveaux button.on { background: var(--accent); color: var(--accent-ink); }
+.lvl { font-size: .5em; vertical-align: middle; background: var(--label); color: var(--accent-ink); border: 1px dashed var(--accent); border-radius: 99px; padding: 2px 12px; margin-left: 8px; }
 .answer .verdict-line { margin: 0; font-family: var(--display); font-weight: 800; font-size: 24px; }
 .answer .verdict-line.ok { color: var(--good); } .answer .verdict-line.ko { color: var(--bad); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -304,10 +315,11 @@ window.__boot = () => {
   function scheduleSync(delay = 20000) { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, delay); }
   async function syncNow() {
     clearTimeout(syncTimer);
-    if (syncing || !token() || !user) return;
+    if (syncing || !token()) return;
     syncing = true;
-    const u = user;
+    const tous = [...new Set([...(store.get("users") || []), ...eleves().map(e => e.prenom), ...(user ? [user] : [])])];
     try {
+     for (const u of tous) {
       const p = localProg(u);
       for (const m of p.dirty.slice()) {
         const path = `progression/${slug(u)}/${m}.json`;
@@ -327,6 +339,7 @@ window.__boot = () => {
           if (!(put.status === 409 || put.status === 422) || attempt) throw new Error("écriture " + put.status);
         }
       }
+     }
       syncState.last = new Date().toISOString(); syncState.error = null; store.set("lastsync", syncState.last);
     } catch (e) {
       syncState.error = String(e.message || e);
@@ -334,9 +347,9 @@ window.__boot = () => {
     } finally { syncing = false; renderSyncBadge(); }
   }
   function syncLabel() {
-    const p = user ? localProg(user) : null;
     if (!token()) return "Sauvegarde non réglée";
-    if (p && p.dirty.length) return syncState.error ? "Sauvegarde en attente (pas de réseau ?)" : "Sauvegarde en cours…";
+    const enAttente = [...new Set([...(store.get("users") || []), ...eleves().map(e => e.prenom)])].some(u => localProg(u).dirty.length);
+    if (enAttente) return syncState.error ? "Sauvegarde en attente (pas de réseau ?)" : "Sauvegarde en cours…";
     if (!syncState.last) return "Rien à sauvegarder pour l'instant";
     const d = new Date(syncState.last);
     return "Sauvegardé ✓ " + d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " à " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -534,14 +547,49 @@ window.__boot = () => {
   }
   function closeCours() { document.getElementById("cours")?.remove(); }
 
+  /* ---------- Élèves et niveaux ---------- */
+  // eleves.json dans le coffre : [{ prenom, niveau }]. Chaque élève ne voit que les paquets de son niveau.
+  const NIVEAUX = ["CP", "CE1", "CE2", "CM1", "CM2"];
+  const eleves = () => store.get("eleves") || [];
+  const niveauDe = name => (eleves().find(e => e.prenom === name) || {}).niveau || null;
+  async function loadEleves() {
+    const r = await gh("eleves.json", {}, "application/vnd.github.raw+json");
+    if (r.status === 404) return eleves();
+    if (!r.ok) throw new Error("élèves " + r.status);
+    const list = await r.json(); store.set("eleves", list); return list;
+  }
+  async function saveEleve(prenom, niveau) {
+    const local = eleves().filter(e => e.prenom !== prenom); local.push({ prenom, niveau }); store.set("eleves", local);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        let sha, list = [];
+        const g = await gh("eleves.json");
+        if (g.ok) { const j = await g.json(); sha = j.sha; list = JSON.parse(b64dec(j.content)); }
+        list = list.filter(e => e.prenom !== prenom); list.push({ prenom, niveau });
+        const put = await gh("eleves.json", { method: "PUT", body: JSON.stringify({ message: `Élève ${prenom} (${niveau})`, content: b64enc(JSON.stringify(list, null, 1)), ...(sha ? { sha } : {}) }) });
+        if (put.ok) { store.set("eleves", list); return; }
+      } catch (e) {}
+    }
+  }
+  function chooseNiveau(name) {
+    app.innerHTML = `<div class="view who">
+      <div class="brand"><h1>Bonjour ${esc(name)} !</h1><button class="back" id="back">← Retour</button></div>
+      <h2 class="ask">Tu es en quelle classe ?</h2>
+      <div class="niveaux">${NIVEAUX.map(n => `<button data-n="${n}">${n}</button>`).join("")}</div>
+      <p class="hint">Tu ne verras que les leçons de ta classe.</p>
+    </div>`;
+    document.getElementById("back").onclick = who;
+    app.querySelectorAll(".niveaux button").forEach(b => b.onclick = async () => { await saveEleve(name, b.dataset.n); login(name); });
+  }
+
   /* ---------- Entrée par prénom ---------- */
   function who() {
     letSleep();
-    const users = store.get("users") || [];
+    const users = [...new Set([...eleves().map(e => e.prenom), ...(store.get("users") || [])])];
     app.innerHTML = `<div class="view who">
       <div class="brand"><h1>Le Cartable</h1><button class="back" id="reglages">Réglages</button></div>
       <h2 class="ask">Qui révise aujourd'hui ?</h2>
-      ${users.length ? `<div class="users">${users.map(u => `<button class="user" data-u="${esc(u)}"><span class="initial">${esc(u.charAt(0).toUpperCase())}</span>${esc(u)}</button>`).join("")}</div>` : ""}
+      ${users.length ? `<div class="users">${users.map(u => `<button class="user" data-u="${esc(u)}"><span class="initial">${esc(u.charAt(0).toUpperCase())}</span>${esc(u)}${niveauDe(u) ? `<span class="lvl">${esc(niveauDe(u))}</span>` : ""}</button>`).join("")}</div>` : ""}
       <form class="newuser" id="newuser">
         <label for="prenom">${users.length ? "Quelqu'un d'autre ? Écris ton prénom" : "Écris ton prénom pour commencer"}</label>
         <div class="row">
@@ -561,20 +609,27 @@ window.__boot = () => {
       login(name);
     });
   }
-  function login(name) { user = name; store.set("current", name); home(); }
+  function login(name) {
+    if (!niveauDe(name)) return chooseNiveau(name);
+    user = name; store.set("current", name); home();
+  }
 
   /* ---------- Accueil ---------- */
   function home() {
     letSleep();
     if (!user) return who();
+    const niveau = niveauDe(user);
+    if (!niveau) return chooseNiveau(user);
     const byMatiere = {};
-    DECKS.forEach(d => (byMatiere[d.matiere] ||= []).push(d));
+    DECKS.filter(d => (d.niveau || "CM2") === niveau).forEach(d => (byMatiere[d.matiere] ||= []).push(d));
     const groups = Object.keys(byMatiere).map(m => `
       <section class="matiere">
         <h2>${esc(m)}</h2>
         <div class="decks">${byMatiere[m].map(d => {
           const last = store.get("deck:" + user + ":" + d.id);
-          const meta = last ? `Dernière fois : ${last.first}/${last.total} du premier coup` : "Pas encore révisé";
+          const enCours = seanceEnCours(d.id);
+          const meta = enCours ? `En cours : ${Object.keys(enCours.etat.grade).length}/${enCours.etat.order.length} · tour ${enCours.etat.round}`
+            : last ? `Dernière fois : ${last.first}/${last.total} du premier coup` : "Pas encore révisé";
           return `<button class="deck" data-id="${esc(d.id)}">
             ${d.exemple ? '<span class="tag">Exemple</span>' : ""}
             <strong>${esc(d.titre)}</strong>
@@ -584,7 +639,7 @@ window.__boot = () => {
         }).join("")}</div>
       </section>`).join("");
     app.innerHTML = `<div class="view home">
-      <div class="brand"><h1>Bonjour ${esc(user)} !</h1><button class="back" id="switch">Changer de prénom</button></div>
+      <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
       <p class="hint">Choisis une leçon et écris tes réponses au crayon.</p>
       ${groups || '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
       <p class="hint" id="sync">${esc(syncLabel())}</p>
@@ -592,15 +647,51 @@ window.__boot = () => {
     document.getElementById("switch").onclick = () => { user = null; store.set("current", null); who(); };
     app.querySelectorAll(".deck").forEach(b => b.addEventListener("click", () => {
       const d = DECKS.find(x => x.id === b.dataset.id);
-      start(d, d.cartes.map((_, i) => i));
+      const enCours = seanceEnCours(d.id);
+      enCours ? askResume(d, enCours) : start(d, d.cartes.map((_, i) => i));
     }));
   }
 
   /* ---------- Séance ---------- */
   // Un tour = toutes les cartes dans l'ordre, navigation libre. Les cartes pas sues repassent au tour suivant.
+  // La séance garde son état (tour, cartes notées, réponses écrites) : on peut quitter et reprendre.
+  // Les traits de crayon restent sur cet iPad seulement (trop lourds pour la sauvegarde).
+  function seanceEnCours(deckId) {
+    if (!user) return null;
+    return Object.values(localProg(user).seances).filter(sc => sc.paquet === deckId && !sc.fin && sc.etat && sc.reponses?.length)
+      .sort((a, b) => a.debut < b.debut ? 1 : -1)[0] || null;
+  }
+  const inkKey = sc => "ink:" + user + ":" + sc.id;
+  // En naviguant : on garde l'état si la séance a déjà commencé (sinon rien à reprendre).
+  function keep(s) { if (s.seance.reponses.length) persist(s); else store.set(inkKey(s.seance), s.ink); }
+  function persist(s) {
+    s.seance.etat = { indices: s.indices, round: s.round, order: s.order, pos: s.pos, grade: s.grade, first: s.first, saisie: s.saisie, shown: s.shown, pick: s.pick, streak: s.streak };
+    saveSeance(user, s.seance);
+    store.set(inkKey(s.seance), s.ink);
+  }
+  function askResume(deck, sc) {
+    const e = sc.etat, faites = Object.keys(e.grade).length;
+    app.innerHTML = `<div class="view end">
+      <h2>On reprend, ${esc(user)} ?</h2>
+      <p class="score">Tu en étais à <b>${faites}</b> sur ${e.order.length}${e.round > 1 ? ` (tour ${e.round})` : ""} dans « ${esc(deck.titre)} ».</p>
+      <div class="actions"><button class="big g" id="resume">Reprendre</button><button class="big retry" id="restart">Tout recommencer</button></div>
+    </div>`;
+    document.getElementById("resume").onclick = () => resume(deck, sc);
+    document.getElementById("restart").onclick = () => { sc.fin = new Date().toISOString(); sc.abandon = true; saveSeance(user, sc); store.set(inkKey(sc), null); start(deck, deck.cartes.map((_, i) => i)); };
+  }
+  function resume(deck, sc) {
+    keepAwake();
+    const e = sc.etat;
+    const s = { deck, indices: e.indices, total: e.indices.length, partial: e.indices.length !== deck.cartes.length, round: e.round, first: e.first || {}, streak: e.streak || 0, best: 0, seance: sc };
+    s.order = e.order; s.grade = e.grade || {}; s.saisie = e.saisie || {}; s.shown = e.shown || {}; s.pick = e.pick || {}; s.auto = {};
+    s.ink = store.get(inkKey(sc)) || {};
+    const next = s.order.findIndex(i => s.grade[i] == null);
+    s.pos = next >= 0 ? next : Math.min(e.pos || 0, s.order.length - 1);
+    card(s);
+  }
   function start(deck, indices) {
     keepAwake();
-    const s = { deck, total: indices.length, partial: indices.length !== deck.cartes.length, round: 1, first: {}, streak: 0, best: 0 };
+    const s = { deck, indices: indices.slice(), total: indices.length, partial: indices.length !== deck.cartes.length, round: 1, first: {}, streak: 0, best: 0 };
     s.seance = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), debut: new Date().toISOString(), paquet: deck.id, titre: deck.titre, cartes: indices.length, reponses: [] };
     newRound(s, indices);
     card(s);
@@ -627,7 +718,7 @@ window.__boot = () => {
         </div>
       </div>`;
     const navBind = go => {
-      document.getElementById("quit").onclick = () => { closeCours(); home(); };
+      document.getElementById("quit").onclick = () => { closeCours(); keep(s); home(); };
       document.getElementById("prev").onclick = () => s.pos > 0 && go(s.pos - 1);
       document.getElementById("next").onclick = () => s.pos < s.order.length - 1 && go(s.pos + 1);
       document.querySelectorAll("#dots .dot").forEach(b => b.onclick = () => go(+b.dataset.k));
@@ -651,16 +742,19 @@ window.__boot = () => {
         </div>
         <div class="actions">
           <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
-          <div class="main" id="main">${answered ? `<button class="big ${ok ? "g" : "reveal"}" id="cont">Continuer</button>` : ""}</div>
+          <div class="main" id="main">${answered ? `<button class="big retry" id="retry">Réessayer</button><button class="big ${ok ? "g" : "reveal"}" id="cont">Continuer</button>` : ""}</div>
           <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
         </div>
       </div>`;
-      navBind(k => { s.pos = k; card(s); });
+      navBind(k => { s.pos = k; keep(s); card(s); });
       document.querySelectorAll(".choice[data-k]").forEach(b => b.onclick = () => {
         s.pick[idx] = +b.dataset.k; card(s);
         if (+b.dataset.k !== c.bon && c.cours) openCours(s.deck, c.cours);
       });
-      if (answered) document.getElementById("cont").onclick = () => { closeCours(); grade(s, idx, ok ? 2 : 0); };
+      if (answered) {
+        document.getElementById("cont").onclick = () => { closeCours(); grade(s, idx, ok ? 2 : 0, { auto: true }); };
+        document.getElementById("retry").onclick = () => { closeCours(); delete s.pick[idx]; delete s.grade[idx]; keep(s); card(s); };
+      }
       return;
     }
     const posee = c.op ? poseHtml(c.op, c.nombres, true) : null;
@@ -697,6 +791,7 @@ window.__boot = () => {
           <button class="tool" id="clear">Tout effacer</button>
         </div>
         <div class="answer${verdict && !verdict.ok ? " ko" : ""}" id="ans" ${shown ? "" : "hidden"}>
+          <button class="fold" id="fold">Voir ma feuille ▾</button>
           ${answerHtml}
         </div>
       </div>
@@ -708,20 +803,20 @@ window.__boot = () => {
       <div class="actions" id="act">
         <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
         <div class="main" id="main">${shown && verdict
-          ? `<button class="big ${verdict.ok ? "g" : "reveal"}" id="cont">Continuer</button>`
+          ? `<button class="big retry" id="retry">Réessayer</button><button class="big ${verdict.ok ? "g" : "reveal"}" id="cont">Continuer</button>`
           : shown
-          ? grades()
+          ? `<button class="big retry" id="retry">Réessayer</button>` + grades()
           : `<button class="big reveal" id="show">${dic ? "Voir le mot" : "Voir la réponse"}</button>`}</div>
         <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
       </div>
     </div>`;
     s.ink[idx] ||= [];
     const pad = drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
-    const go = k => { pad.stop(); voice.stop(); s.pos = k; card(s); };
+    const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
     document.getElementById("undo").onclick = pad.undo;
     document.getElementById("clear").onclick = pad.clear;
     navBind(go);
-    document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); closeCours(); home(); };
+    document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); closeCours(); keep(s); home(); };
     if (dic) {
       document.getElementById("say").onclick = () => dictate(c);
       if (c.phrase) document.getElementById("sayphrase").onclick = () => sayPhrase(c);
@@ -736,13 +831,22 @@ window.__boot = () => {
       if (!v) { document.getElementById("rep").focus(); return; }
       pad.stop(); voice.stop(); s.saisie[idx] = v; s.shown[idx] = true; card(s);
     });
+    // Replier la correction pour revoir sa feuille, la déplier pour la relire.
+    document.getElementById("fold").onclick = () => {
+      const a = document.getElementById("ans"), mini = a.classList.toggle("mini");
+      document.getElementById("fold").textContent = mini ? "Voir la correction ▴" : "Voir ma feuille ▾";
+    };
+    const bindRetry = () => document.getElementById("retry")?.addEventListener("click", () => {
+      pad.stop(); voice.stop(); delete s.saisie[idx]; delete s.shown[idx]; delete s.grade[idx]; keep(s); card(s);
+    });
+    bindRetry();
     if (shown && verdict) document.getElementById("cont").onclick = () => { pad.stop(); voice.stop(); grade(s, idx, verdict.ok ? 2 : 0, { auto: true, saisie: saisi }); };
     else if (shown) { bindPoints(); bindGrades(); }
     else document.getElementById("show").onclick = () => {
       s.shown[idx] = true;
       document.getElementById("ans").hidden = false;
-      document.getElementById("main").innerHTML = grades();
-      bindPoints(); bindGrades();
+      document.getElementById("main").innerHTML = `<button class="big retry" id="retry">Réessayer</button>` + grades();
+      bindPoints(); bindGrades(); bindRetry();
     };
   }
 
@@ -751,8 +855,8 @@ window.__boot = () => {
     s.grade[idx] = v;
     // Trace de chaque réponse (note 2 = sue, 1 = presque, 0 = à revoir ; auto = corrigée par l'app).
     s.seance.reponses.push({ t: new Date().toISOString(), carte: idx, tour: s.round, note: v, ...(extra.auto ? { auto: true } : {}), ...(extra.saisie != null ? { saisie: extra.saisie } : {}) });
-    saveSeance(user, s.seance);
-    if (s.round === 1) s.first[idx] = v;
+    if (s.round === 1 && s.first[idx] == null) s.first[idx] = v;
+    persist(s);
     if (!regrade) {
       s.streak = v === 2 ? s.streak + 1 : 0;
       if (s.streak > 0 && s.streak % 5 === 0) toast(pick([`Bravo ${user}, ${s.streak} de suite !`, `Quelle série, ${user} ! ${s.streak} d'affilée !`, `Tu es en feu, ${user} ! ${s.streak} de suite !`]));
@@ -775,14 +879,16 @@ window.__boot = () => {
       <p class="score">Encore <b>${left.length}</b> ${left.length > 1 ? "cartes" : "carte"} à revoir, ${esc(user)}. On les refait ?</p>
       <div class="actions"><button class="big reveal" id="goon">On y va !</button><button class="big m" id="stop">Plus tard</button></div>
     </div>`;
-    document.getElementById("goon").onclick = () => { s.round++; newRound(s, left); card(s); };
-    document.getElementById("stop").onclick = () => { saveScore(s); home(); };
+    document.getElementById("goon").onclick = () => { s.round++; newRound(s, left); persist(s); card(s); };
+    // « Plus tard » : le tour suivant est prêt, on le reprendra depuis l'accueil.
+    document.getElementById("stop").onclick = () => { s.round++; newRound(s, left); persist(s); home(); };
   }
 
   function saveScore(s) {
     const firstOk = Object.keys(s.first).filter(i => s.first[i] === 2).length;
     if (!s.partial) store.set("deck:" + user + ":" + s.deck.id, { first: firstOk, total: s.total, date: new Date().toISOString().slice(0, 10) });
     s.seance.fin = new Date().toISOString(); s.seance.tours = s.round; s.seance.premierCoup = firstOk;
+    delete s.seance.etat; store.set(inkKey(s.seance), null);
     saveSeance(user, s.seance); syncNow();
     return firstOk;
   }
@@ -877,9 +983,11 @@ window.__boot = () => {
   // Démarrage : sans clé, on va aux Réglages. Sinon on affiche tout de suite les paquets gardés sur l'iPad,
   // puis on va chercher la dernière version dans le coffre.
   if (!token()) return settings();
-  home();
+  // Premier lancement après la mise à jour : on attend la liste des élèves (et leur niveau) avant d'afficher.
+  if (eleves().length) { home(); loadEleves().then(() => { if (document.getElementById("newuser")) who(); }).catch(() => {}); }
+  else { app.innerHTML = '<div class="view who"><p class="hint">Chargement…</p></div>'; within(loadEleves().catch(() => {}), 8000).then(() => home()); }
   loadDecks().then(() => { if (document.querySelector(".home")) home(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
-  if (user && localProg(user).dirty.length) syncNow();
+  syncNow();
 };
 </script>
 <script>window.__boot();</script>
