@@ -236,13 +236,17 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
   background-position: 0 0, 0 47px, 0 11px;
   box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08); border: 2px solid var(--line); }
 .seyes:focus-within { border-color: var(--pen); }
-.seyes input { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 100%; border: 0; background: transparent; padding: 0 20px 0 84px;
-  font-family: var(--body); font-size: 54px; line-height: 1; color: var(--pen); -webkit-user-select: text; user-select: text; }
-.seyes input:focus { outline: none; }
-.seyes input::placeholder { color: var(--muted); opacity: .45; font-size: 26px; }
-.seyes input[readonly] { color: var(--ink); }
+/* Zone d'écriture : un bloc éditable (pas un champ de formulaire) pour que le texte suive les règles normales de la page,
+   identiques sur Safari et ailleurs. Une copie invisible (.probe) sert à mesurer où tombe le pied des lettres. */
+.seyes .ecrit { position: absolute; left: 0; right: 0; top: 0; padding: 0 20px 0 84px; margin: 0;
+  font-family: var(--body); font-size: 54px; line-height: 1.25; white-space: nowrap; overflow: hidden;
+  color: var(--pen); outline: none; -webkit-user-select: text; user-select: text; cursor: text; }
+.seyes .ecrit:empty::before { content: attr(data-ph); color: var(--muted); opacity: .45; font-size: 26px; }
+.seyes .ecrit[contenteditable="false"] { color: var(--ink); cursor: default; }
+.seyes .probe { visibility: hidden; pointer-events: none; }
+.seyes .probe i { display: inline-block; width: 0; height: 0; vertical-align: baseline; }
 .seyes.court { height: 120px; flex-basis: 360px; max-width: 520px; }
-.seyes.court input { font-size: 44px; }
+.seyes.court .ecrit { font-size: 44px; }
 .ligne .big { flex: 0 0 auto; min-width: 180px; }
 .sheet.dictee { display: flex; align-items: center; justify-content: center; padding: 24px 24px 24px 24px; background-image: none; background-color: transparent; box-shadow: none; overflow: visible; }
 .sheet.dictee { flex-direction: column; gap: 18px; }
@@ -250,7 +254,7 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .sheet.dictee .answer { position: static; width: min(760px, 100%); max-height: none; }
 .sheet.dictee .answer .fold { display: none; }
 .sheet.dictee .seyes { flex: 0 0 auto; width: min(760px, 100%); height: 192px; }
-.sheet.dictee .seyes input { font-size: 64px; }
+.sheet.dictee .seyes .ecrit { font-size: 64px; }
 .big.retry { background: var(--paper); color: var(--ink); box-shadow: 0 4px 0 var(--line); }
 .niveaux { display: flex; gap: 10px; flex-wrap: wrap; }
 .niveaux button { min-width: 84px; min-height: 64px; border-radius: 14px; background: var(--paper); font-family: var(--display); font-weight: 800; font-size: 24px; box-shadow: 0 2px 0 var(--line); }
@@ -522,21 +526,16 @@ window.__boot = () => {
   // Les grosses lignes Seyès tombent à y = 47, 95, 143… (une tous les 48 px). On mesure la police pour que
   // la ligne de base du texte (le pied des lettres) se pose sur la dernière grosse ligne de la case.
   function alignLigne() {
-    document.querySelectorAll(".seyes input").forEach(inp => {
-      const box = inp.parentElement, H = box.clientHeight;
-      const size = parseFloat(getComputedStyle(inp).fontSize);
-      const fam = getComputedStyle(inp).fontFamily;
-      let A = size * 0.95, D = size * 0.3;
-      try {
-        const ctx = document.createElement("canvas").getContext("2d");
-        ctx.font = size + "px " + fam;
-        const m = ctx.measureText("Hg");
-        if (m.fontBoundingBoxAscent) { A = m.fontBoundingBoxAscent; D = m.fontBoundingBoxDescent; }
-      } catch (e) {}
-      const L = Math.ceil(A + D) + 4;                     // hauteur de la bande de texte
-      const baseInBand = (L - (A + D)) / 2 + A;           // position de la ligne de base dans la bande
-      let thick = 47; while (thick + 48 <= H - D * 0.6) thick += 48; // dernière grosse ligne qui laisse la place aux jambages
-      Object.assign(inp.style, { height: L + "px", lineHeight: L + "px", top: Math.round(thick + 0.75 - baseInBand) + "px" });
+    document.querySelectorAll(".seyes").forEach(box => {
+      const ed = box.querySelector(".ecrit:not(.probe)"), probe = box.querySelector(".probe"), mark = probe?.querySelector("i");
+      if (!ed || !mark) return;
+      probe.style.top = "0px";
+      // Position réelle du pied des lettres dans la bande de texte, mesurée par le navigateur lui-même.
+      const base = mark.getBoundingClientRect().top - probe.getBoundingClientRect().top;
+      const H = box.clientHeight, desc = probe.getBoundingClientRect().height - base;
+      let thick = 47; while (thick + 48 <= H - desc * 0.7) thick += 48; // dernière grosse ligne qui laisse la place aux jambages
+      const top = Math.round(thick + 0.75 - base) + "px";
+      ed.style.top = top; probe.style.top = top;
     });
   }
   try { document.fonts?.ready.then(alignLigne); } catch (e) {}
@@ -821,8 +820,9 @@ window.__boot = () => {
     // La ligne de cahier : grande au centre pour la dictée, plus courte sous la feuille pour le résultat des maths.
     // Après « Vérifier », la dictée garde le mot écrit, en lecture seule.
     const ligneHtml = grand => `<form class="ligne" id="saisie">
-        <div class="seyes${grand ? "" : " court"}"><input id="rep" ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-          placeholder="${grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? `readonly value="${esc(saisi || "")}"` : ""}></div>
+        <div class="seyes${grand ? "" : " court"}"><div class="ecrit" id="rep" role="textbox" aria-label="${posee ? "Résultat" : "Le mot"}"
+          ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          data-ph="${grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? 'contenteditable="false"' : 'data-edit="1"'}>${shown ? esc(saisi || "") : ""}</div><div class="ecrit probe" aria-hidden="true">Hg<i></i></div></div>
         ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}
       </form>`;
     // Dictée : c'est juste ou à revoir, pas de « presque ».
@@ -868,6 +868,13 @@ window.__boot = () => {
         <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
       </div>
     </div>`;
+    const ed = document.querySelector('#rep[data-edit]');
+    if (ed) {
+      try { ed.contentEditable = "plaintext-only"; } catch (e) {}
+      if (ed.contentEditable !== "plaintext-only") ed.contentEditable = "true";
+      ed.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("saisie").requestSubmit(); } });
+      ed.addEventListener("input", () => { if (!ed.textContent.trim()) ed.textContent = ""; });
+    }
     alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
     const pad = dic ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
@@ -886,7 +893,7 @@ window.__boot = () => {
     const bindGrades = () => document.querySelectorAll("#main .big[data-v]").forEach(b => b.onclick = () => { pad.stop(); voice.stop(); grade(s, idx, +b.dataset.v); });
     document.getElementById("saisie")?.addEventListener("submit", e => {
       e.preventDefault();
-      const v = document.getElementById("rep").value.trim();
+      const v = document.getElementById("rep").textContent.replace(/\s+/g, " ").trim();
       if (!v) { document.getElementById("rep").focus(); return; }
       pad.stop(); voice.stop(); s.saisie[idx] = v; s.shown[idx] = true; card(s);
     });
