@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-title" content="Le Cartable">
-<link rel="apple-touch-icon" sizes="180x180" href="https://bmax-alt.github.io/le-cartable/apple-touch-icon.png">
-<link rel="apple-touch-icon" sizes="167x167" href="https://bmax-alt.github.io/le-cartable/apple-touch-icon-167.png">
-<link rel="apple-touch-icon" sizes="152x152" href="https://bmax-alt.github.io/le-cartable/apple-touch-icon-152.png">
-<link rel="icon" type="image/png" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="167x167" href="apple-touch-icon-167.png">
+<link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="theme-color" content="#1f3a96">
 <style>*,*::before,*::after{box-sizing:border-box}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Le Cartable</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -377,6 +380,31 @@ window.__boot = () => {
       syncState.error = String(e.message || e);
       scheduleSync(60000);
     } finally { syncing = false; renderSyncBadge(); }
+  }
+  // Récupération : au démarrage, on relit dans le coffre les séances du mois en cours et du mois précédent,
+  // pour chaque élève. Une app réinstallée (ou un nouvel iPad) retrouve ainsi sa progression et ses séances en cours.
+  async function pullProgress() {
+    if (!token()) return;
+    const now = new Date(), prev = new Date(now.getFullYear(), now.getMonth() - 1, 15);
+    const mois = [now, prev].map(d => d.toISOString().slice(0, 7));
+    const tous = [...new Set([...eleves().map(e => e.prenom), ...(store.get("users") || [])])];
+    for (const u of tous) for (const m of mois) {
+      try {
+        const r = await gh(`progression/${slug(u)}/${m}.json`, {}, "application/vnd.github.raw+json");
+        if (!r.ok) continue;
+        const remote = await r.json(), p = localProg(u);
+        (remote.seances || []).forEach(sc => {
+          const loc = p.seances[sc.id];
+          if (!loc || (sc.reponses?.length || 0) > (loc.reponses?.length || 0)) p.seances[sc.id] = sc;
+        });
+        store.set(progKey(u), p);
+        // Résumé « Dernière fois » des paquets terminés, s'il manque sur cet appareil.
+        Object.values(p.seances).filter(sc => sc.fin && !sc.abandon && sc.premierCoup != null).sort((a, b) => a.fin < b.fin ? -1 : 1).forEach(sc => {
+          const k = "deck:" + u + ":" + sc.paquet, cur = store.get(k);
+          if (!cur || cur.date <= sc.fin.slice(0, 10)) store.set(k, { first: sc.premierCoup, total: sc.cartes, date: sc.fin.slice(0, 10) });
+        });
+      } catch (e) {}
+    }
   }
   function syncLabel() {
     if (!token()) return "Sauvegarde non réglée";
@@ -1057,6 +1085,7 @@ window.__boot = () => {
   // Premier lancement après la mise à jour : on attend la liste des élèves (et leur niveau) avant d'afficher.
   if (eleves().length) { home(); loadEleves().then(() => { if (document.getElementById("newuser")) who(); }).catch(() => {}); }
   else { app.innerHTML = '<div class="view who"><p class="hint">Chargement…</p></div>'; within(loadEleves().catch(() => {}), 8000).then(() => home()); }
+  within(loadEleves().catch(() => {}), 8000).then(() => pullProgress()).then(() => { if (document.querySelector(".home")) home(); });
   loadDecks().then(() => { if (document.querySelector(".home")) home(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
   syncNow();
 };
