@@ -440,7 +440,13 @@ window.__boot = () => {
       const v = document.getElementById("tok").value.trim(), out = document.getElementById("tokmsg");
       if (!v) return;
       const old = token(); store.set("token", v); out.textContent = "Vérification…";
-      try { await loadDecks(); out.textContent = "C'est bon !"; setTimeout(() => user ? home() : who(), 500); }
+      try {
+        await loadDecks();
+        out.textContent = "C'est bon ! Je récupère les prénoms et la progression…";
+        await within(loadEleves().catch(() => {}), 8000);
+        await within(pullProgress().catch(() => {}), 15000);
+        user && niveauDe(user) ? home() : who();
+      }
       catch (err) { store.set("token", old); out.textContent = "Cette clé ne marche pas (" + err.message + "). Vérifie-la et réessaie."; }
     });
   }
