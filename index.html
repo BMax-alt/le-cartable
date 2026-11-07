@@ -97,7 +97,7 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
   background-position: 0 0, 65px 0, 0 47px, 0 11px;
   box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08);
 }
-.sheet canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.sheet canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .sheet .placeholder { position: absolute; left: 84px; top: 58px; color: var(--muted); opacity: .55; font-size: 20px; pointer-events: none; transition: opacity .2s; }
 .tools { position: absolute; right: 12px; top: 12px; display: flex; gap: 8px; }
 .tool { background: rgba(255,255,255,.92); border-radius: 10px; padding: 8px 14px; font-size: 16px; box-shadow: 0 1px 0 var(--line), 0 2px 8px rgba(29,43,79,.1); }
@@ -276,7 +276,7 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
   function drawPad(cv, ph) {
     const ctx = cv.getContext("2d");
     const strokes = [];
-    let current = null, penSeen = false, w = 0, h = 0;
+    let current = null, penSeen = false, w = 0, h = 0, rect = null;
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--pen").trim() || "#1f3fa6";
 
     function size() {
@@ -299,12 +299,13 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
       }
       ph.style.opacity = strokes.length ? 0 : "";
     }
-    const pt = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pointerType === "pen" ? (e.pressure || 0.5) : 0.5 }; };
+    const pt = e => { const r = rect || cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pointerType === "pen" ? (e.pressure || 0.5) : 0.5 }; };
     const allowed = e => { if (e.pointerType === "pen") penSeen = true; return !(penSeen && e.pointerType === "touch"); };
 
     cv.addEventListener("pointerdown", e => {
       if (!allowed(e)) return;
-      e.preventDefault(); cv.setPointerCapture(e.pointerId);
+      e.preventDefault(); rect = cv.getBoundingClientRect();
+      try { cv.setPointerCapture(e.pointerId); } catch (err) {}
       current = [pt(e)]; strokes.push(current); redraw();
     });
     cv.addEventListener("pointermove", e => {
@@ -315,6 +316,10 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
       for (const ce of evs) { const p = pt(ce); seg(current[current.length - 1], p); current.push(p); }
     });
     const up = () => { current = null; };
+    // Safari iPad : sans ça, le trait du Pencil est pris pour un défilement ou une sélection et se coupe.
+    const block = e => { if (e.cancelable) e.preventDefault(); };
+    ["touchstart", "touchmove", "touchend"].forEach(t => cv.addEventListener(t, block, { passive: false }));
+    cv.addEventListener("contextmenu", block);
     cv.addEventListener("pointerup", up);
     cv.addEventListener("pointercancel", up);
     const ro = new ResizeObserver(size); ro.observe(cv);
