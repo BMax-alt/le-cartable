@@ -25,5 +25,30 @@ window.DECKS = [
       { q: "Quand le roi a-t-il été guillotiné ?", r: "Le 21 janvier 1793" },
       { q: "Comment s'appelle la femme de Louis XVI ?", r: "Marie-Antoinette" }
     ]
+  },
+  {
+    id: "francais-determinants",
+    matiere: "Français",
+    titre: "Les déterminants",
+    cartes: [
+      { q: "À quelle famille appartiennent les articles ?", r: "À la famille des déterminants" },
+      { q: "Qu'indiquent les articles sur le nom ?", r: "Ils indiquent :", points: ["Le genre : masculin ou féminin", "Le nombre : singulier ou pluriel"] },
+      { q: "Que forment l'article et le nom commun ensemble ?", r: "Le groupe nominal (GN) de base : déterminant + nom. Exemple : la plage" },
+      { q: "Quels sont les articles définis ?", r: "le, la, l', les" },
+      { q: "À quoi servent les articles définis ?", r: "Ils désignent plus précisément un nom. Exemple : le roi" },
+      { q: "Quels sont les articles indéfinis ?", r: "un, une, des" },
+      { q: "À quoi servent les articles indéfinis ?", r: "Ils ne précisent pas le nom dont il s'agit. Exemple : un voyage" },
+      { q: "Quels sont les articles contractés ?", r: "au, du, aux, des" },
+      { q: "Que remplace un article contracté ?", r: "Une préposition et un article défini" },
+      { q: "Décompose les quatre articles contractés.", r: "Les articles contractés :", points: ["au = à + le (au moment)", "du = de + le (du temps)", "aux = à + les (aux environs)", "des = de + les (des gens)"] },
+      { q: "« Des » peut être deux sortes d'article. Lesquelles ?", r: "Deux sortes :", points: ["Article indéfini : des romains", "Article contracté (de + les) : des gens"] },
+      { q: "Comment appelle-t-on le petit mot qui précède et précise le nom commun ?", r: "Le déterminant" },
+      { q: "Quels renseignements le déterminant donne-t-il sur le nom ?", r: "Trois renseignements :", points: ["Le genre (masculin / féminin)", "Le nombre (singulier / pluriel)", "L'appartenance"] },
+      { q: "Mon chien, ce chien, chaque chien : quel type de déterminant est souligné à chaque fois ?", r: "Trois types :", points: ["mon : possessif", "ce : démonstratif", "chaque : indéfini"] },
+      { q: "Que désignent les déterminants possessifs ?", r: "Celui qui possède, celui qui a" },
+      { q: "Déterminants possessifs : mon, ton, son au masculin singulier. Quels sont-ils au féminin singulier ?", r: "ma, ta, sa" },
+      { q: "Quel est le pluriel de mon, ton, son ?", r: "mes, tes, ses" },
+      { q: "Quel est le pluriel de notre, votre, leur ?", r: "nos, vos, leurs" }
+    ]
   }
 ];
