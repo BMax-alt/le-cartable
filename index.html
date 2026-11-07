@@ -245,7 +245,8 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .seyes .ecrit[contenteditable="false"] { color: var(--ink); cursor: default; }
 .seyes .probe { visibility: hidden; pointer-events: none; }
 .seyes .probe i { display: inline-block; width: 0; height: 0; vertical-align: baseline; }
-.seyes.court { height: 120px; flex-basis: 360px; max-width: 520px; }
+.seyes.court { height: 96px; flex-basis: 360px; max-width: 520px; background-image: none; }
+.seyes.court .ecrit { padding-left: 24px; }
 .seyes.court .ecrit { font-size: 44px; }
 .ligne .big { flex: 0 0 auto; min-width: 180px; }
 .sheet.dictee { display: flex; align-items: center; justify-content: center; padding: 24px 24px 24px 24px; background-image: none; background-color: transparent; box-shadow: none; overflow: visible; }
@@ -533,8 +534,12 @@ window.__boot = () => {
       // Position réelle du pied des lettres dans la bande de texte, mesurée par le navigateur lui-même.
       const base = mark.getBoundingClientRect().top - probe.getBoundingClientRect().top;
       const H = box.clientHeight, desc = probe.getBoundingClientRect().height - base;
-      let thick = 47; while (thick + 48 <= H - desc * 0.7) thick += 48; // dernière grosse ligne qui laisse la place aux jambages
-      const top = Math.round(thick + 0.75 - base) + "px";
+      let top;
+      if (box.classList.contains("court")) top = Math.round((H - probe.getBoundingClientRect().height) / 2) + "px"; // case blanche (maths) : texte centré
+      else {
+        let thick = 47; while (thick + 48 <= H - desc * 0.7) thick += 48; // dernière grosse ligne qui laisse la place aux jambages
+        top = Math.round(thick + 0.75 - base) + "px";
+      }
       ed.style.top = top; probe.style.top = top;
     });
   }
