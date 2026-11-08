@@ -605,6 +605,11 @@ window.__boot = () => {
     if (sansAccents(a) === sansAccents(b)) return { ok: false, msg: "Presque : attention aux accents." };
     return { ok: false, msg: "" };
   }
+  // Exercice à trou : plusieurs réponses peuvent être acceptées (ex. « paie » ou « paye »).
+  function checkRep(saisi, attendu) {
+    const res = [].concat(attendu).map(a => checkMot(saisi, a));
+    return res.find(r => r.ok) || res.find(r => r.msg) || res[0];
+  }
   function verdictHtml(v, saisi) {
     if (!v) return "";
     return v.ok
@@ -871,31 +876,39 @@ window.__boot = () => {
       return;
     }
     const posee = c.op ? poseHtml(c.op, c.nombres, true) : null;
-    // Correction automatique : résultat (maths) ou mot (dictée) écrit au crayon dans la case, l'iPad le convertit en texte.
-    const attendu = posee ? posee.r : c.mot != null ? c.mot : null;
+    // Correction automatique : résultat (maths), mot (dictée) ou réponse d'un exercice à trou (leçon),
+    // écrit au crayon dans la case, l'iPad le convertit en texte.
+    const trou = c.rep != null;
+    const attendu = posee ? posee.r : c.mot != null ? c.mot : trou ? c.rep : null;
     const saisi = s.saisie[idx];
-    const verdict = saisi != null ? (posee ? checkNombre(saisi, attendu) : checkMot(saisi, attendu)) : null;
+    const verdict = saisi != null ? (posee ? checkNombre(saisi, attendu) : checkRep(saisi, attendu)) : null;
     const dic = !!s.deck.dictee;
+    // Dictée et exercice à trou : la grande ligne au milieu, sans feuille de brouillon.
+    const grand = dic || trou;
     // La ligne de cahier : grande au centre pour la dictée, plus courte sous la feuille pour le résultat des maths.
     // Après « Vérifier », la dictée garde le mot écrit, en lecture seule.
     const ligneHtml = grand => `<form class="ligne" id="saisie">
-        <div class="seyes${grand ? "" : " court"}"><div class="ecrit" id="rep" role="textbox" aria-label="${posee ? "Résultat" : "Le mot"}"
+        <div class="seyes${grand ? "" : " court"}"><div class="ecrit" id="rep" role="textbox" aria-label="${posee ? "Résultat" : trou ? "La réponse" : "Le mot"}"
           ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-          data-ph="${grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? 'contenteditable="false"' : 'data-edit="1"'}>${shown ? esc(saisi || "") : ""}</div><div class="ecrit probe" aria-hidden="true">Hg<i></i></div></div>
+          data-ph="${trou ? "Écris ta réponse ici, au crayon" : grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? 'contenteditable="false"' : 'data-edit="1"'}>${shown ? esc(saisi || "") : ""}</div><div class="ecrit probe" aria-hidden="true">Hg<i></i></div></div>
         ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}
       </form>`;
-    // Dictée : c'est juste ou à revoir, pas de « presque ».
-    const grades = () => dic
+    // Dictée et exercice à trou : c'est juste ou à revoir, pas de « presque ».
+    const grades = () => grand
       ? gradeBtn(0, "b", "À revoir") + gradeBtn(2, "g", "C'est juste !")
       : gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
     const questionHtml = dic
       ? `<div class="question"><small>Dictée · mot ${s.pos + 1}</small><p>Écoute bien, puis écris le mot.</p>
           <div class="listen"><button class="say" id="say">🔊 Écouter</button>${c.phrase ? '<button class="say alt" id="sayphrase">Une phrase d\'exemple</button>' : ""}</div></div>`
+      : trou
+      ? `<div class="question"><div class="qhead"><small>Exercice · écris la réponse dans la case</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`
       : posee
       ? `<div class="question"><div class="qhead"><small>Exercice · pose l'opération sur la feuille</small>${coursBtn}</div><p>${esc(c.q || "Pose et calcule :")} ${esc(c.nombres.join(" " + c.op + " "))}</p></div>`
       : `<div class="question"><div class="qhead"><small>${c.points ? "Question longue" : "Question"}</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`;
     const answerHtml = dic
       ? `${verdictHtml(verdict, saisi)}<small>Le mot</small><p class="r">${esc(c.mot)}</p>`
+      : trou
+      ? `${verdictHtml(verdict, saisi)}<small>La réponse</small><p class="r">${esc(c.r || [].concat(c.rep)[0])}</p>`
       : posee
       ? `${verdictHtml(verdict, saisi)}<small>L'opération posée</small>${posee.html}<p class="r">${esc(c.nombres.join(" " + c.op + " "))} = ${esc(posee.r)}</p>`
       : `<small>La réponse</small>
@@ -904,8 +917,8 @@ window.__boot = () => {
     app.innerHTML = `<div class="view">
       ${topbar}
       ${questionHtml}
-      <div class="sheet${dic ? " dictee" : ""}" id="sheet">
-        ${dic ? ligneHtml(true) : `<canvas id="cv"></canvas>
+      <div class="sheet${grand ? " dictee" : ""}" id="sheet">
+        ${grand ? ligneHtml(true) : `<canvas id="cv"></canvas>
         <span class="placeholder" id="ph">Écris ta réponse ici…</span>
         <div class="tools">
           <button class="tool" id="undo">Annuler</button>
@@ -936,7 +949,7 @@ window.__boot = () => {
     }
     alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
-    const pad = dic ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
+    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
     document.getElementById("undo")?.addEventListener("click", pad.undo);
     document.getElementById("clear")?.addEventListener("click", pad.clear);
