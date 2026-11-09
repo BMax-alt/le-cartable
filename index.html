@@ -628,7 +628,11 @@ window.__boot = () => {
   function checkMot(saisi, attendu) {
     const norm = x => String(x).normalize("NFC").replace(/[’‘`´]/g, "'").replace(/œ/g, "oe").replace(/Œ/g, "Oe").replace(/\s*([,/])\s*/g, ", ").replace(/\s+/g, " ").trim();
     // Deux formes du même mot (« étonnant, étonnante ») : la virgule entre les deux n'est pas une faute de dictée.
-    if (/, /.test(norm(attendu)) && !/[.!?]$/.test(norm(attendu))) { const nv = x => norm(x).replace(/,/g, " ").replace(/\s+/g, " "); const l1 = x => x ? x[0].toLowerCase() + x.slice(1) : x; if (l1(nv(saisi)) === l1(nv(attendu))) saisi = attendu; }
+    if (/, /.test(norm(attendu)) && !/[.!?]$/.test(norm(attendu))) { const nv = x => norm(x).replace(/,/g, " ").replace(/\s+/g, " "); const l1 = x => x ? x[0].toLowerCase() + x.slice(1) : x; if (l1(nv(saisi)) === l1(nv(attendu))) saisi = attendu;
+      // Le féminin noté entre parenthèses, comme en classe : « étonnant(e) » vaut « étonnant, étonnante ».
+      const [m, f] = norm(attendu).split(", ");
+      const court = f && f.startsWith(m) && f.length > m.length ? `${m}(${f.slice(m.length)})` : null;
+      if (court && l1(norm(saisi).replace(/\s*([()])\s*/g, "$1")) === court) saisi = attendu; }
     let a = norm(saisi);
     const b = norm(attendu);
     // Griffonner met d'office une majuscule à la première lettre : si le mot attendu commence par une minuscule,
