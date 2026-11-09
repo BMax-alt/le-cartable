@@ -275,6 +275,15 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .sheet.dictee .answer .fold { display: none; }
 .sheet.dictee .seyes { flex: 0 0 auto; width: min(760px, 100%); height: 192px; }
 .sheet.dictee .seyes .ecrit { font-size: 64px; }
+/* Dictée bilan : une phrase entière, sur plusieurs lignes du cahier */
+.sheet.dictee.bilan .seyes { height: auto; min-height: 192px; }
+.sheet.dictee.bilan .seyes .ecrit { position: relative; top: auto !important; white-space: normal; font-size: 36px; line-height: 48px; min-height: 144px; padding: 6px 20px 18px 84px; }
+.sheet.dictee.bilan .seyes .probe { display: none; }
+.essai { margin: 0; font-size: 20px; font-weight: 700; color: var(--bad, #c0392b); }
+.stop { text-align: center; }
+.stop .medal { background: var(--accent); }
+.choixbilan { display: flex; flex-direction: column; gap: 14px; width: min(520px, 100%); }
+.choixbilan .big { width: 100%; }
 .big.retry { background: var(--paper); color: var(--ink); box-shadow: 0 4px 0 var(--line); }
 .niveaux { display: flex; gap: 10px; flex-wrap: wrap; }
 .niveaux button { min-width: 84px; min-height: 64px; border-radius: 14px; background: var(--paper); font-family: var(--display); font-weight: 800; font-size: 24px; box-shadow: 0 2px 0 var(--line); }
@@ -525,7 +534,7 @@ window.__boot = () => {
   };
   if (window.speechSynthesis) { voice.pick(); speechSynthesis.addEventListener?.("voiceschanged", () => voice.pick()); }
   // Par défaut, le mot seul. La phrase d'exemple seulement si l'enfant la demande.
-  const dictate = c => voice.say([c.mot + "."]);
+  const dictate = c => voice.say([c.mot != null ? c.mot + "." : c.phrase]);
   const sayPhrase = c => voice.say([c.phrase, c.mot + "."]);
 
   /* ---------- Opérations posées ---------- */
@@ -628,6 +637,15 @@ window.__boot = () => {
   function checkRep(saisi, attendu) {
     const res = [].concat(attendu).map(a => checkMot(saisi, a));
     return res.find(r => r.ok) || res.find(r => r.msg) || res[0];
+  }
+  // Dictée bilan : une phrase entière. Les espaces autour de la ponctuation ne comptent pas (Griffonner en met ou pas).
+  function checkPhrase(saisi, attendu) {
+    const sq = x => String(x).replace(/[’‘`´]/g, "'").replace(/\s*([.,:;!?'])\s*/g, "$1").replace(/\s+/g, " ").trim();
+    const r = checkMot(sq(saisi), sq(attendu));
+    if (r.ok || r.msg) return r;
+    const nu = x => sq(x).replace(/[.,:;!?]/g, "").toLowerCase();
+    if (nu(saisi) === nu(attendu)) return { ok: false, msg: "Presque : attention à la ponctuation." };
+    return r;
   }
   function verdictHtml(v, saisi) {
     if (!v) return "";
@@ -787,7 +805,7 @@ window.__boot = () => {
       serie = d.serie || null;
       return `${head}<button class="deck${ok ? " done" : ""}" data-id="${esc(d.id)}">
           ${evaluation ? '<span class="tag eval">Évaluation</span>' : ""}
-          <strong>${esc(d.serie && d.groupe ? "Groupe " + d.groupe : d.titre)}</strong>
+          <strong>${esc(d.bilan ? "Dictée bilan" : d.serie && d.groupe ? "Groupe " + d.groupe : d.titre)}</strong>
           <span>${plural(d.cartes.length, d.dictee ? (d.bilan ? "phrase" : "mot") : "carte")}</span>
           ${pour ? `<span class="pour">À savoir pour le ${esc(longDate(pour))}</span>` : ""}
           ${ok ? '<span class="fait">✓ Fait</span>' : ""}
@@ -799,7 +817,7 @@ window.__boot = () => {
     app.querySelectorAll(".deck").forEach(b => b.addEventListener("click", () => {
       const d = DECKS.find(x => x.id === b.dataset.id);
       const enCours = seanceEnCours(d.id);
-      enCours ? askResume(d, enCours) : start(d, d.cartes.map((_, i) => i));
+      enCours ? askResume(d, enCours) : d.bilan ? choixBilan(d) : start(d, d.cartes.map((_, i) => i));
     }));
   }
   // Après une séance, on revient là d'où l'on vient : le jour ou l'accueil.
@@ -887,7 +905,7 @@ window.__boot = () => {
   // En naviguant : on garde l'état si la séance a déjà commencé (sinon rien à reprendre).
   function keep(s) { if (s.seance.reponses.length) persist(s); else store.set(inkKey(s.seance), s.ink); }
   function persist(s) {
-    s.seance.etat = { indices: s.indices, round: s.round, order: s.order, pos: s.pos, grade: s.grade, first: s.first, saisie: s.saisie, shown: s.shown, pick: s.pick, streak: s.streak };
+    s.seance.etat = { indices: s.indices, round: s.round, order: s.order, pos: s.pos, grade: s.grade, first: s.first, saisie: s.saisie, shown: s.shown, pick: s.pick, streak: s.streak, essais: s.essais, brouillon: s.brouillon };
     saveSeance(user, s.seance);
     store.set(inkKey(s.seance), s.ink);
   }
@@ -899,13 +917,13 @@ window.__boot = () => {
       <div class="actions"><button class="big g" id="resume">Reprendre</button><button class="big retry" id="restart">Tout recommencer</button></div>
     </div>`;
     document.getElementById("resume").onclick = () => resume(deck, sc);
-    document.getElementById("restart").onclick = () => { sc.fin = new Date().toISOString(); sc.abandon = true; saveSeance(user, sc); store.set(inkKey(sc), null); start(deck, deck.cartes.map((_, i) => i)); };
+    document.getElementById("restart").onclick = () => { sc.fin = new Date().toISOString(); sc.abandon = true; saveSeance(user, sc); store.set(inkKey(sc), null); deck.bilan ? choixBilan(deck) : start(deck, deck.cartes.map((_, i) => i)); };
   }
   function resume(deck, sc) {
     keepAwake();
     const e = sc.etat;
     const s = { deck, indices: e.indices, total: e.indices.length, partial: e.indices.length !== deck.cartes.length, round: e.round, first: e.first || {}, streak: e.streak || 0, best: 0, seance: sc };
-    s.order = e.order; s.grade = e.grade || {}; s.saisie = e.saisie || {}; s.shown = e.shown || {}; s.pick = e.pick || {}; s.auto = {};
+    s.order = e.order; s.grade = e.grade || {}; s.saisie = e.saisie || {}; s.shown = e.shown || {}; s.pick = e.pick || {}; s.auto = {}; s.essais = e.essais || {}; s.brouillon = e.brouillon || {};
     s.ink = store.get(inkKey(sc)) || {};
     const next = s.order.findIndex(i => s.grade[i] == null);
     s.pos = next >= 0 ? next : Math.min(e.pos || 0, s.order.length - 1);
@@ -918,7 +936,7 @@ window.__boot = () => {
     newRound(s, indices);
     card(s);
   }
-  function newRound(s, order) { s.order = order.slice(); s.pos = 0; s.grade = {}; s.ink = {}; s.shown = {}; s.pick = {}; s.saisie = {}; s.auto = {}; }
+  function newRound(s, order) { s.order = order.slice(); s.pos = 0; s.grade = {}; s.ink = {}; s.shown = {}; s.pick = {}; s.saisie = {}; s.auto = {}; s.essais = {}; s.brouillon = {}; }
 
   function card(s) {
     const idx = s.order[s.pos];
@@ -983,9 +1001,12 @@ window.__boot = () => {
     // Correction automatique : résultat (maths), mot (dictée) ou réponse d'un exercice à trou (leçon),
     // écrit au crayon dans la case, l'iPad le convertit en texte.
     const trou = c.rep != null;
-    const attendu = posee ? posee.r : c.mot != null ? c.mot : trou ? c.rep : null;
+    const bilan = !!s.deck.bilan;
+    const attendu = posee ? posee.r : bilan ? c.phrase : c.mot != null ? c.mot : trou ? c.rep : null;
     const saisi = s.saisie[idx];
-    const verdict = saisi != null ? (posee ? checkNombre(saisi, attendu) : checkRep(saisi, attendu)) : null;
+    const verdict = saisi != null ? (posee ? checkNombre(saisi, attendu) : bilan ? checkPhrase(saisi, attendu) : checkRep(saisi, attendu)) : null;
+    s.essais ||= {}; s.brouillon ||= {};
+    const essais = s.essais[idx] || 0, brouillon = s.brouillon[idx];
     const dic = !!s.deck.dictee;
     // Dictée et exercice à trou : la grande ligne au milieu, sans feuille de brouillon.
     const grand = dic || trou;
@@ -994,14 +1015,18 @@ window.__boot = () => {
     const ligneHtml = grand => `<form class="ligne" id="saisie">
         <div class="seyes${grand ? "" : " court"}"><div class="ecrit" id="rep" role="textbox" aria-label="${posee ? "Résultat" : trou ? "La réponse" : "Le mot"}"
           ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-          data-ph="${trou ? "Écris ta réponse ici, au crayon" : grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? 'contenteditable="false"' : 'data-edit="1"'}>${shown ? esc(saisi || "") : ""}</div><div class="ecrit probe" aria-hidden="true">Hg<i></i></div></div>
+          data-ph="${trou ? "Écris ta réponse ici, au crayon" : bilan ? "Écris la phrase ici, au crayon" : grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? 'contenteditable="false"' : 'data-edit="1"'}>${shown ? esc(saisi || "") : bilan && brouillon ? esc(brouillon) : ""}</div><div class="ecrit probe" aria-hidden="true">Hg<i></i></div></div>
         ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}
       </form>`;
     // Dictée et exercice à trou : c'est juste ou à revoir, pas de « presque ».
     const grades = () => grand
       ? gradeBtn(0, "b", "À revoir") + gradeBtn(2, "g", "C'est juste !")
       : gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
-    const questionHtml = dic
+    const questionHtml = bilan
+      ? `<div class="question"><small>Dictée bilan · groupe ${esc(c.groupe)}</small><p>Écoute bien la phrase, puis écris-la.</p>
+          <div class="listen"><button class="say" id="say">🔊 Écouter</button></div>
+          ${essais && !shown ? `<p class="essai">C'est faux, cherche ! Essai ${essais + 1} sur 3${s.essaiMsg ? " · " + esc(s.essaiMsg) : ""}</p>` : ""}</div>`
+      : dic
       ? `<div class="question"><small>Dictée · mot ${s.pos + 1}</small><p>Écoute bien, puis écris le mot.</p>
           <div class="listen"><button class="say" id="say">🔊 Écouter</button>${c.phrase ? '<button class="say alt" id="sayphrase">Une phrase d\'exemple</button>' : ""}</div></div>`
       : trou
@@ -1009,7 +1034,9 @@ window.__boot = () => {
       : posee
       ? `<div class="question"><div class="qhead"><small>Exercice · pose l'opération sur la feuille</small>${coursBtn}</div><p>${esc(c.q || "Pose et calcule :")} ${esc(c.nombres.join(" " + c.op + " "))}</p></div>`
       : `<div class="question"><div class="qhead"><small>${c.points ? "Question longue" : "Question"}</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`;
-    const answerHtml = dic
+    const answerHtml = bilan
+      ? `${verdictHtml(verdict, saisi)}<small>La phrase</small><p class="r">${esc(c.phrase)}</p>`
+      : dic
       ? `${verdictHtml(verdict, saisi)}<small>Le mot</small><p class="r">${esc(c.mot)}</p>`
       : trou
       ? `${verdictHtml(verdict, saisi)}<small>La réponse</small><p class="r">${esc(c.r || [].concat(c.rep)[0])}</p>`
@@ -1021,7 +1048,7 @@ window.__boot = () => {
     app.innerHTML = `<div class="view">
       ${topbar}
       ${questionHtml}
-      <div class="sheet${grand ? " dictee" : ""}" id="sheet">
+      <div class="sheet${grand ? " dictee" : ""}${bilan ? " bilan" : ""}" id="sheet">
         ${grand ? ligneHtml(true) : `<canvas id="cv"></canvas>
         <span class="placeholder" id="ph">Écris ta réponse ici…</span>
         <div class="tools">
@@ -1040,7 +1067,7 @@ window.__boot = () => {
           ? `<button class="big retry" id="retry">Réessayer</button><button class="big ${verdict.ok ? "g" : "reveal"}" id="cont">Continuer</button>`
           : shown
           ? `<button class="big retry" id="retry">Réessayer</button>` + grades()
-          : `<button class="big reveal" id="show">${dic ? "Voir le mot" : "Voir la réponse"}</button>`}</div>
+          : bilan ? "" : `<button class="big reveal" id="show">${dic ? "Voir le mot" : "Voir la réponse"}</button>`}</div>
         <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
       </div>
     </div>`;
@@ -1061,9 +1088,9 @@ window.__boot = () => {
     document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); closeCours(); keep(s); back(); };
     if (dic) {
       document.getElementById("say").onclick = () => dictate(c);
-      if (c.phrase) document.getElementById("sayphrase").onclick = () => sayPhrase(c);
+      if (c.phrase && !bilan) document.getElementById("sayphrase").onclick = () => sayPhrase(c);
       // Le mot est dit tout seul en arrivant sur une carte pas encore vue (l'iPad l'autorise après le premier toucher).
-      if (!shown) dictate(c);
+      if (!shown && !(bilan && essais)) dictate(c);
     }
     const bindPoints = () => document.querySelectorAll("#pts li button").forEach(b => b.onclick = () => b.parentElement.classList.toggle("on"));
     const bindGrades = () => document.querySelectorAll("#main .big[data-v]").forEach(b => b.onclick = () => { pad.stop(); voice.stop(); grade(s, idx, +b.dataset.v); });
@@ -1071,6 +1098,14 @@ window.__boot = () => {
       e.preventDefault();
       const v = document.getElementById("rep").textContent.replace(/\s+/g, " ").trim();
       if (!v) { document.getElementById("rep").focus(); return; }
+      // Dictée bilan : trois essais. Faux : on ne montre pas la phrase, on cherche encore.
+      if (bilan) {
+        const r = checkPhrase(v, c.phrase);
+        if (!r.ok && essais < 2) {
+          s.essais[idx] = essais + 1; s.brouillon[idx] = v; s.essaiMsg = r.msg || "";
+          pad.stop(); voice.stop(); keep(s); card(s); voice.say(["C'est faux, cherche."]); return;
+        }
+      }
       pad.stop(); voice.stop(); s.saisie[idx] = v; s.shown[idx] = true; card(s);
     });
     // Replier la correction pour revoir sa feuille, la déplier pour la relire.
@@ -1079,12 +1114,12 @@ window.__boot = () => {
       document.getElementById("fold").textContent = mini ? "Voir la correction ▴" : "Voir ma feuille ▾";
     };
     const bindRetry = () => document.getElementById("retry")?.addEventListener("click", () => {
-      pad.stop(); voice.stop(); delete s.saisie[idx]; delete s.shown[idx]; delete s.grade[idx]; keep(s); card(s);
+      pad.stop(); voice.stop(); delete s.saisie[idx]; delete s.shown[idx]; delete s.grade[idx]; delete s.essais[idx]; delete s.brouillon[idx]; keep(s); card(s);
     });
     bindRetry();
-    if (shown && verdict) document.getElementById("cont").onclick = () => { pad.stop(); voice.stop(); grade(s, idx, verdict.ok ? 2 : 0, { auto: true, saisie: saisi }); };
+    if (shown && verdict) document.getElementById("cont").onclick = () => { pad.stop(); voice.stop(); grade(s, idx, verdict.ok ? (bilan && essais ? 1 : 2) : 0, { auto: true, saisie: saisi }); };
     else if (shown) { bindPoints(); bindGrades(); }
-    else document.getElementById("show").onclick = () => {
+    else if (document.getElementById("show")) document.getElementById("show").onclick = () => {
       s.shown[idx] = true;
       document.getElementById("ans").hidden = false;
       document.getElementById("main").innerHTML = `<button class="big retry" id="retry">Réessayer</button>` + grades();
@@ -1108,9 +1143,45 @@ window.__boot = () => {
     const n = s.order.length;
     for (let k = 1; k <= n; k++) {
       const p = (s.pos + k) % n;
-      if (s.grade[s.order[p]] == null) { s.pos = p; return card(s); }
+      if (s.grade[s.order[p]] == null) {
+        const avant = s.deck.cartes[idx].groupe, apres = s.deck.cartes[s.order[p]].groupe;
+        const fin = s.deck.bilan && s.round === 1 && p > s.pos && avant !== apres;
+        s.pos = p;
+        return fin ? stopGroupe(avant, false, () => card(s)) : card(s);
+      }
     }
+    if (s.deck.bilan && s.round === 1 && !s.finDite) { s.finDite = true; return stopGroupe(s.deck.cartes[idx].groupe, true, () => endRound(s)); }
     endRound(s);
+  }
+
+  // Dictée bilan : « Stop ! Le groupe jaune est terminé », dit et affiché, avant de passer au groupe suivant.
+  function stopGroupe(groupe, derniere, suite) {
+    const txt = `Stop ! Le groupe ${groupe} est terminé.` + (derniere ? " La dictée est finie." : "");
+    app.innerHTML = `<div class="view end stop">
+      <div class="medal" aria-hidden="true">✋</div>
+      <h2>Stop ! Le groupe ${esc(groupe)} est terminé.</h2>
+      ${derniere ? '<p class="sub">La dictée est finie.</p>' : '<p class="sub">On passe au groupe suivant.</p>'}
+      <div class="actions"><button class="big g" id="suite">${derniere ? "Voir mon résultat" : "Continuer"}</button></div>
+    </div>`;
+    voice.say([txt]);
+    document.getElementById("suite").onclick = () => { voice.stop(); suite(); };
+  }
+  // Dictée bilan : on choisit jusqu'où on va. Les groupes s'ajoutent : jaune, puis vert, puis violet.
+  function choixBilan(deck) {
+    const ordre = ["jaune", "vert", "violet"].filter(g => deck.cartes.some(c => c.groupe === g));
+    const choix = ordre.map((g, k) => ordre.slice(0, k + 1));
+    const nom = l => l.map(g => g[0].toUpperCase() + g.slice(1)).join(" + ");
+    app.innerHTML = `<div class="view end">
+      <h2>${esc(deck.titre)}</h2>
+      <p class="sub">Jusqu'où tu vas aujourd'hui, ${esc(user)} ?</p>
+      <div class="choixbilan">${choix.map((l, k) => `<button class="big ${k === choix.length - 1 ? "g" : "reveal"}" data-k="${k}">${esc(nom(l))}</button>`).join("")}
+        <button class="big retry" id="annuler">Retour</button></div>
+    </div>`;
+    app.querySelectorAll(".choixbilan [data-k]").forEach(b => b.onclick = () => {
+      const l = choix[+b.dataset.k];
+      start(deck, deck.cartes.map((c, i) => l.includes(c.groupe) ? i : -1).filter(i => i >= 0));
+    });
+    document.getElementById("annuler").onclick = back;
   }
 
   function endRound(s) {
@@ -1151,7 +1222,7 @@ window.__boot = () => {
       <h2>${esc(title)}</h2>
       <p class="sub">${sub}</p>
       <p class="score"><b>${firstOk}</b> sur ${s.total} du premier coup.</p>
-      ${hard.length ? `<p class="hint">Les cartes qui t'ont demandé un effort :</p><ul class="review">${hard.map(i => { const k = s.deck.cartes[i]; return `<li><span>${esc(s.deck.dictee ? k.mot : k.op ? k.nombres.join(" " + k.op + " ") : k.q)}</span></li>`; }).join("")}</ul>` : ""}
+      ${hard.length ? `<p class="hint">Les cartes qui t'ont demandé un effort :</p><ul class="review">${hard.map(i => { const k = s.deck.cartes[i]; return `<li><span>${esc(s.deck.bilan ? k.phrase : s.deck.dictee ? k.mot : k.op ? k.nombres.join(" " + k.op + " ") : k.q)}</span></li>`; }).join("")}</ul>` : ""}
       <div class="actions">
         ${hard.length ? '<button class="big m" id="hard">Revoir ces cartes</button>' : ""}
         <button class="big g" id="again">Tout recommencer</button>
@@ -1159,7 +1230,7 @@ window.__boot = () => {
       </div>
     </div>`;
     confetti();
-    document.getElementById("again").onclick = () => start(s.deck, s.deck.cartes.map((_, i) => i));
+    document.getElementById("again").onclick = () => s.deck.bilan ? choixBilan(s.deck) : start(s.deck, s.deck.cartes.map((_, i) => i));
     document.getElementById("home").onclick = back;
     if (hard.length) document.getElementById("hard").onclick = () => start(s.deck, hard);
   }
