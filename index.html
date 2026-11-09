@@ -853,6 +853,7 @@ window.__boot = () => {
 
   function home() {
     letSleep();
+    if (store.get("majEnAttente")) { store.set("majEnAttente", false); return location.reload(); }
     retour = null;
     if (!user) return who();
     const niveau = niveauDe(user);
@@ -880,6 +881,7 @@ window.__boot = () => {
 
   function archives() {
     letSleep();
+    if (store.get("majEnAttente")) { store.set("majEnAttente", false); return location.reload(); }
     retour = "archives";
     app.innerHTML = `<div class="view home">
       <div class="topbar"><button class="back" id="week">← Semaine</button></div>
@@ -894,6 +896,7 @@ window.__boot = () => {
 
   function jour(date) {
     letSleep();
+    if (store.get("majEnAttente")) { store.set("majEnAttente", false); return location.reload(); }
     retour = date;
     app.innerHTML = `<div class="view home">
       <div class="topbar"><button class="back" id="week">← Semaine</button></div>
@@ -1338,6 +1341,22 @@ window.__boot = () => {
   }
 
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && document.querySelector(".sheet")) keepAwake(); });
+  // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
+  // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
+  // seulement hors séance (pas au milieu d'une carte).
+  const VERSION = "2026-11-09-c";
+  async function verifierVersion() {
+    try {
+      const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
+      const m = (await r.text()).match(/const VERSION = "([^"]+)"/);
+      if (m && m[1] !== VERSION) {
+        if (document.querySelector(".sheet, .choices")) { store.set("majEnAttente", true); return; }
+        location.reload();
+      }
+    } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") verifierVersion(); });
+  verifierVersion();
   // Démarrage : sans clé, on va aux Réglages. Sinon on affiche tout de suite les paquets gardés sur l'iPad,
   // puis on va chercher la dernière version dans le coffre.
   if (!token()) return settings();
