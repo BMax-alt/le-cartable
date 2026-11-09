@@ -650,7 +650,15 @@ window.__boot = () => {
   }
   // Exercice à trou : plusieurs réponses peuvent être acceptées (ex. « paie » ou « paye »).
   function checkRep(saisi, attendu) {
-    const res = [].concat(attendu).map(a => checkMot(saisi, a));
+    // Tolérances pour une réponse d'un mot : un point final ajouté par Griffonner, ou l'article de la question
+    // répété (« c'est le … » → « le garçon »).
+    const att = [].concat(attendu);
+    let v = String(saisi).trim();
+    if (!att.some(a => /[.!?]$/.test(a))) v = v.replace(/\s*[.!?]+$/, "");
+    const art = v.match(/^(le|la|les|l'|l’|un|une|des)\s*(.+)$/i);
+    if (art && !att.some(a => /^(le|la|les|l'|un|une|des)\b/i.test(a)) && att.some(a => checkMot(art[2], a).ok)) v = art[2];
+    saisi = v;
+    const res = att.map(a => checkMot(saisi, a));
     return res.find(r => r.ok) || res.find(r => r.msg) || res[0];
   }
   // Dictée bilan : une phrase entière. Les espaces autour de la ponctuation ne comptent pas (Griffonner en met ou pas).
@@ -1367,7 +1375,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-g";
+  const VERSION = "2026-11-09-h";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
