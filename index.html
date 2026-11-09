@@ -1063,7 +1063,8 @@ window.__boot = () => {
     const essais = s.essais[idx] || 0, brouillon = s.brouillon[idx];
     const dic = !!s.deck.dictee;
     // Dictée et exercice à trou : la grande ligne au milieu, sans feuille de brouillon.
-    const grand = dic || trou;
+    // Paquet « crayon » (ex. CE1) : pas de Griffonner, l'enfant écrit librement sur la feuille et se corrige seule.
+    const grand = (dic || trou) && !s.deck.crayon;
     // La ligne de cahier : grande au centre pour la dictée, plus courte sous la feuille pour le résultat des maths.
     // Après « Vérifier », la dictée garde le mot écrit, en lecture seule.
     const ligneHtml = grand => `<form class="ligne" id="saisie">
@@ -1074,7 +1075,7 @@ window.__boot = () => {
         ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}
       </form>`;
     // Dictée et exercice à trou : c'est juste ou à revoir, pas de « presque ».
-    const grades = () => grand
+    const grades = () => grand || dic || trou
       ? gradeBtn(0, "b", "À revoir") + gradeBtn(2, "g", "C'est juste !")
       : gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
     const questionHtml = bilan
@@ -1362,7 +1363,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-d";
+  const VERSION = "2026-11-09-e";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
