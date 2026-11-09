@@ -78,6 +78,10 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .deck .meta { color: var(--muted); font-size: 16px; margin-top: auto; }
 .tag { align-self: flex-start; background: var(--label); color: var(--accent-ink); font-size: 14px; padding: 2px 10px; border-radius: 99px; border: 1px dashed var(--accent); }
 .hint { color: var(--muted); font-size: 16px; max-width: 60ch; line-height: 1.5; }
+.qtable { border-collapse: collapse; background: var(--paper); font-size: 15px; margin-top: 6px; align-self: flex-start; }
+.qtable th, .qtable td { border: 1px solid var(--line); padding: 2px 10px; text-align: center; }
+.qtable thead th { background: var(--label); font-weight: 700; }
+.qtable tbody th { text-align: left; font-weight: 600; }
 /* Semaine : ce qu'il faut savoir pour chaque jour de la fiche */
 .week { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .day { background: var(--paper); border-radius: 14px; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -210,6 +214,8 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .pose .cell i.fade { opacity: .45; }
 /* Questionnaire */
 .choices { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.choices.compact { flex: 0 0 auto; gap: 8px; }
+.choices.compact .choice { padding: 10px 18px; font-size: 20px; }
 .choice { text-align: left; background: var(--paper); border-radius: 14px; padding: 18px 22px; font-size: 22px; line-height: 1.3; box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.06); border: 3px solid transparent; }
 .choice.right { border-color: var(--good); background: #eaf7ef; }
 .choice.wrong { border-color: var(--bad); background: #fbeaea; }
@@ -673,6 +679,12 @@ window.__boot = () => {
     if (nu(saisi) === nu(attendu)) return { ok: false, msg: "Presque : attention à la ponctuation." };
     return r;
   }
+  // Un tableau à lire dans la question : { tableau: { colonnes: [...], lignes: [[...], ...] } }.
+  function tableHtml(c) {
+    const t = c.tableau; if (!t) return "";
+    return `<table class="qtable"><thead><tr>${t.colonnes.map(x => `<th>${esc(x)}</th>`).join("")}</tr></thead>
+      <tbody>${t.lignes.map(l => `<tr>${l.map((x, k) => k ? `<td>${esc(x)}</td>` : `<th>${esc(x)}</th>`).join("")}</tr>`).join("")}</tbody></table>`;
+  }
   function verdictHtml(v, saisi) {
     if (!v) return "";
     return v.ok
@@ -1044,19 +1056,26 @@ window.__boot = () => {
       app.innerHTML = `<div class="view">
         ${topbar}
         <div class="question"><div class="qhead"><small>Questionnaire · avant les exercices</small>${coursBtn}</div><p>${esc(c.q)}</p></div>
-        <div class="choices">
+        <div class="choices${c.brouillon ? " compact" : ""}">
           ${c.choix.map((x, k) => `<button class="choice ${answered && k === c.bon ? "right" : ""} ${answered && k === picked && !ok ? "wrong" : ""}" data-k="${k}" ${answered ? "disabled" : ""}>${esc(x)}</button>`).join("")}
           ${answered ? `<div class="verdict ${ok ? "ok" : "ko"}"><b>${ok ? pick([`Bravo ${esc(user)} !`, "C'est juste !", "Exactement !"]) : "Pas tout à fait."}</b>${esc(c.explication || "")}</div>` : ""}
         </div>
+        ${c.brouillon ? `<div class="sheet" id="sheet"><canvas id="cv"></canvas><span class="placeholder" id="ph">Brouillon : fais ton tableau ici…</span>
+          <div class="tools"><button class="tool" id="undo">Annuler</button><button class="tool" id="clear">Tout effacer</button></div></div>` : ""}
         <div class="actions">
           <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
           <div class="main" id="main">${answered ? `<button class="big retry" id="retry">Réessayer</button><button class="big ${ok ? "g" : "reveal"}" id="cont">Continuer</button>` : ""}</div>
           <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
         </div>
       </div>`;
-      navBind(k => { s.pos = k; keep(s); card(s); });
+      // QCM avec brouillon : une feuille pour chercher (tableau, arbre) avant de choisir.
+      s.ink[idx] ||= [];
+      const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]) : { stop() {}, undo() {}, clear() {} };
+      document.getElementById("undo")?.addEventListener("click", qpad.undo);
+      document.getElementById("clear")?.addEventListener("click", qpad.clear);
+      navBind(k => { qpad.stop(); s.pos = k; keep(s); card(s); });
       document.querySelectorAll(".choice[data-k]").forEach(b => b.onclick = () => {
-        s.pick[idx] = +b.dataset.k; card(s);
+        qpad.stop(); s.pick[idx] = +b.dataset.k; card(s);
         if (+b.dataset.k !== c.bon && c.cours) openCours(s.deck, c.cours);
       });
       if (answered) {
@@ -1101,10 +1120,10 @@ window.__boot = () => {
       ? `<div class="question"><small>Dictée · mot ${s.pos + 1}</small><p>Écoute bien, puis écris le mot.</p>
           <div class="listen"><button class="say" id="say">🔊 Écouter</button>${c.phrase ? '<button class="say alt" id="sayphrase">Une phrase d\'exemple</button>' : ""}</div></div>`
       : trou
-      ? `<div class="question"><div class="qhead"><small>${c.brouillon ? "Problème · cherche sur la feuille, puis écris la réponse dans la case" : "Exercice · écris la réponse dans la case"}</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`
+      ? `<div class="question"><div class="qhead"><small>${c.brouillon ? "Problème · cherche sur la feuille, puis écris la réponse dans la case" : "Question · écris la réponse dans la case"}</small>${coursBtn}</div><p>${esc(c.q)}</p>${tableHtml(c)}</div>`
       : posee
       ? `<div class="question"><div class="qhead"><small>Exercice · pose l'opération sur la feuille</small>${coursBtn}</div><p>${esc(c.q || "Pose et calcule :")} ${esc(c.nombres.join(" " + c.op + " "))}</p></div>`
-      : `<div class="question"><div class="qhead"><small>${c.points ? "Question longue" : "Question"}</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`;
+      : `<div class="question"><div class="qhead"><small>${c.points ? "Question · écris ta réponse sur la feuille" : "Question"}</small>${coursBtn}</div><p>${esc(c.q)}</p>${tableHtml(c)}</div>`;
     const answerHtml = bilan
       ? `${verdictHtml(verdict, saisi)}<small>La phrase</small><p class="r">${esc(c.phrase)}</p>`
       : dic
@@ -1378,7 +1397,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-i";
+  const VERSION = "2026-11-09-k";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
