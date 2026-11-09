@@ -1064,7 +1064,8 @@ window.__boot = () => {
     const dic = !!s.deck.dictee;
     // Dictée et exercice à trou : la grande ligne au milieu, sans feuille de brouillon.
     // Paquet « crayon » (ex. CE1) : pas de Griffonner, l'enfant écrit librement sur la feuille et se corrige seule.
-    const grand = (dic || trou) && !s.deck.crayon;
+    // Problème (brouillon) : feuille pour chercher, et la réponse dans une petite case en dessous.
+    const grand = (dic || trou) && !s.deck.crayon && !c.brouillon;
     // La ligne de cahier : grande au centre pour la dictée, plus courte sous la feuille pour le résultat des maths.
     // Après « Vérifier », la dictée garde le mot écrit, en lecture seule.
     const ligneHtml = grand => `<form class="ligne" id="saisie">
@@ -1086,7 +1087,7 @@ window.__boot = () => {
       ? `<div class="question"><small>Dictée · mot ${s.pos + 1}</small><p>Écoute bien, puis écris le mot.</p>
           <div class="listen"><button class="say" id="say">🔊 Écouter</button>${c.phrase ? '<button class="say alt" id="sayphrase">Une phrase d\'exemple</button>' : ""}</div></div>`
       : trou
-      ? `<div class="question"><div class="qhead"><small>Exercice · écris la réponse dans la case</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`
+      ? `<div class="question"><div class="qhead"><small>${c.brouillon ? "Problème · cherche sur la feuille, puis écris la réponse dans la case" : "Exercice · écris la réponse dans la case"}</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`
       : posee
       ? `<div class="question"><div class="qhead"><small>Exercice · pose l'opération sur la feuille</small>${coursBtn}</div><p>${esc(c.q || "Pose et calcule :")} ${esc(c.nombres.join(" " + c.op + " "))}</p></div>`
       : `<div class="question"><div class="qhead"><small>${c.points ? "Question longue" : "Question"}</small>${coursBtn}</div><p>${esc(c.q)}</p></div>`;
@@ -1116,7 +1117,7 @@ window.__boot = () => {
           ${answerHtml}
         </div>
       </div>
-      ${posee && !shown ? ligneHtml(false) : ""}
+      ${(posee || (trou && c.brouillon)) && !shown ? ligneHtml(false) : ""}
       <div class="actions" id="act">
         <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
         <div class="main" id="main">${shown && verdict
@@ -1363,7 +1364,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-e";
+  const VERSION = "2026-11-09-f";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
