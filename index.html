@@ -655,8 +655,11 @@ window.__boot = () => {
     const att = [].concat(attendu);
     let v = String(saisi).trim();
     if (!att.some(a => /[.!?]$/.test(a))) v = v.replace(/\s*[.!?]+$/, "");
-    const art = v.match(/^(le|la|les|l'|l’|un|une|des)\s*(.+)$/i);
-    if (art && !att.some(a => /^(le|la|les|l'|un|une|des)\b/i.test(a)) && att.some(a => checkMot(art[2], a).ok)) v = art[2];
+    // Les petits mots de la question que l'enfant réécrit devant sa réponse (« l'adolescence », « de l'eau », « à l'… »),
+    // même si Griffonner a perdu l'apostrophe (« L adolescence »). Seulement si la réponse attendue n'en a pas.
+    const petits = /^((le|la|les|l|un|une|des|de|du|d|à|a|au|aux)(\s+|\s*['’]\s*))+/i;
+    const sans = v.replace(petits, "");
+    if (sans && sans !== v && !att.some(a => petits.test(a)) && att.some(a => checkMot(sans, a).ok)) v = sans;
     saisi = v;
     const res = att.map(a => checkMot(saisi, a));
     return res.find(r => r.ok) || res.find(r => r.msg) || res[0];
@@ -1375,7 +1378,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-h";
+  const VERSION = "2026-11-09-i";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
