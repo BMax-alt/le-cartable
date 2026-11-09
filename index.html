@@ -89,6 +89,7 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .day.done { border-color: var(--good); }
 .day.done .n { color: var(--good); font-weight: 700; }
 .day.empty { opacity: .45; box-shadow: none; }
+.day.past { opacity: .55; }
 .deck.done { box-shadow: 0 0 0 3px var(--good), 0 6px 18px rgba(29,43,79,.08); }
 .deck .fait { color: var(--good); font-weight: 700; font-size: 16px; }
 .deck .pour { font-size: 15px; color: var(--muted); }
@@ -268,6 +269,9 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .seyes.court .ecrit { padding-left: 24px; }
 .seyes.court .ecrit { font-size: 44px; }
 .ligne .big { flex: 0 0 auto; min-width: 180px; }
+.outils { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.outils .tool { position: static; font-size: 20px; min-width: 64px; min-height: 52px; padding: 8px 16px; border-radius: 12px; background: var(--paper); box-shadow: 0 2px 0 var(--line); }
+#apos { font-size: 30px; font-weight: 800; }
 .sheet.dictee { display: flex; align-items: center; justify-content: center; padding: 24px 24px 24px 24px; background-image: none; background-color: transparent; box-shadow: none; overflow: visible; }
 .sheet.dictee { flex-direction: column; gap: 18px; }
 .sheet.dictee .ligne { flex-direction: column; }
@@ -622,6 +626,8 @@ window.__boot = () => {
   }
   function checkMot(saisi, attendu) {
     const norm = x => String(x).normalize("NFC").replace(/[’‘`´]/g, "'").replace(/œ/g, "oe").replace(/Œ/g, "Oe").replace(/\s*([,/])\s*/g, ", ").replace(/\s+/g, " ").trim();
+    // Deux formes du même mot (« étonnant, étonnante ») : la virgule entre les deux n'est pas une faute de dictée.
+    if (/, /.test(norm(attendu)) && !/[.!?]$/.test(norm(attendu))) { const nv = x => norm(x).replace(/,/g, " ").replace(/\s+/g, " "); const l1 = x => x ? x[0].toLowerCase() + x.slice(1) : x; if (l1(nv(saisi)) === l1(nv(attendu))) saisi = attendu; }
     let a = norm(saisi);
     const b = norm(attendu);
     // Griffonner met d'office une majuscule à la première lettre : si le mot attendu commence par une minuscule,
@@ -631,6 +637,7 @@ window.__boot = () => {
     if (a.toLowerCase() === b.toLowerCase()) return { ok: false, msg: "Presque : attention aux majuscules." };
     const sansAccents = x => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     if (sansAccents(a) === sansAccents(b)) return { ok: false, msg: "Presque : attention aux accents." };
+    if (a.replace(/'/g, " ").replace(/\s+/g, " ").toLowerCase() === b.replace(/'/g, " ").replace(/\s+/g, " ").toLowerCase()) return { ok: false, msg: "Presque : il manque l'apostrophe (bouton ’ sous la case)." };
     return { ok: false, msg: "" };
   }
   // Exercice à trou : plusieurs réponses peuvent être acceptées (ex. « paie » ou « paye »).
@@ -800,7 +807,8 @@ window.__boot = () => {
       const ok = opts.date ? faitPour(d, opts.date) : fait(d);
       const meta = enCours ? `En cours : ${Object.keys(enCours.etat.grade).length}/${enCours.etat.order.length} · tour ${enCours.etat.round}`
         : last ? `Dernière fois : ${last.first}/${last.total} du premier coup` : "Pas encore révisé";
-      const pour = opts.archives ? datesDe(d.id).pop() : null;
+      const dates = opts.archives ? datesDe(d.id) : [];
+      const pour = dates.find(x => x > todayIso()) || dates.pop();
       const head = d.serie && d.serie !== serie ? `<h3 class="serie">${esc(d.serie)}</h3>` : "";
       serie = d.serie || null;
       return `${head}<button class="deck${ok ? " done" : ""}" data-id="${esc(d.id)}">
@@ -831,15 +839,17 @@ window.__boot = () => {
     const niveau = niveauDe(user);
     if (!niveau) return chooseNiveau(user);
     const today = todayIso();
+    // Le jour qu'on prépare : le prochain jour (après aujourd'hui) qui a des leçons. Lundi soir, c'est mardi.
+    const cible = semaine().find(x => x > today && entreesDu(x).length);
     const jours = semaine().map(date => {
       const e = entreesDu(date), n = nbLecons(e), d = fromIso(date);
-      const cls = [n ? "" : "empty", date === today ? "today" : "", n && jourFait(date) ? "done" : ""].filter(Boolean).join(" ");
+      const cls = [n ? "" : "empty", date === cible ? "today" : "", date <= today ? "past" : "", n && jourFait(date) ? "done" : ""].filter(Boolean).join(" ");
       return `<button class="day ${cls}" data-date="${date}" ${n ? "" : "disabled"}>
         <small>à savoir pour</small><b>${JOURS[d.getDay()].slice(0, 3)}. ${d.getDate()}</b>
         <span class="n">${n ? (jourFait(date) ? "✓ Tout est fait" : plural(n, "leçon")) : "—"}</span></button>`;
     }).join("");
-    // Archives : les paquets qui ne sont plus à savoir pour aujourd'hui ou plus tard.
-    const archives = mesPaquets().filter(d => !datesDe(d.id).some(x => x >= today));
+    // En dessous : toutes les leçons, rangées par matière, avec leur date « à savoir pour ».
+    const archives = mesPaquets();
     const autres = [...new Set(archives.map(d => d.matiere))].filter(m => !MATIERES.includes(m));
     const groups = [...MATIERES, ...autres].map(m => {
       const list = archives.filter(d => d.matiere === m);
@@ -849,7 +859,7 @@ window.__boot = () => {
     app.innerHTML = `<div class="view home">
       <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
       <section><div class="week">${jours}</div></section>
-      ${groups ? `<p class="hint">Les archives : toutes les leçons déjà passées, par matière.</p>${groups}` : ""}
+      ${groups ? `<p class="hint">Toutes mes leçons, par matière.</p>${groups}` : ""}
       ${DECKS.length ? "" : '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
       <p class="hint" id="sync">${esc(syncLabel())}</p>
     </div>`;
@@ -1016,6 +1026,7 @@ window.__boot = () => {
         <div class="seyes${grand ? "" : " court"}"><div class="ecrit" id="rep" role="textbox" aria-label="${posee ? "Résultat" : trou ? "La réponse" : "Le mot"}"
           ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
           data-ph="${trou ? "Écris ta réponse ici, au crayon" : bilan ? "Écris la phrase ici, au crayon" : grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? 'contenteditable="false"' : 'data-edit="1"'}>${shown ? esc(saisi || "") : bilan && brouillon ? esc(brouillon) : ""}</div><div class="ecrit probe" aria-hidden="true">Hg<i></i></div></div>
+        ${shown || posee ? "" : '<div class="outils"><button type="button" class="tool" id="apos" aria-label="Apostrophe">’</button><button type="button" class="tool" id="bksp">⌫ Une lettre</button><button type="button" class="tool" id="wipe">Tout effacer</button></div>'}
         ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}
       </form>`;
     // Dictée et exercice à trou : c'est juste ou à revoir, pas de « presque ».
@@ -1073,6 +1084,16 @@ window.__boot = () => {
     </div>`;
     const ed = document.querySelector('#rep[data-edit]');
     if (ed) {
+      // Boutons sous la case : Griffonner perd parfois l'apostrophe et efface un mot entier quand on barre une lettre.
+      const caret = () => { const sel = getSelection(); return sel.rangeCount && ed.contains(sel.anchorNode) && sel.isCollapsed ? sel : null; };
+      const edit = fn => { const t = ed.textContent, sel = caret(); let pos = t.length;
+        if (sel && sel.anchorNode.nodeType === 3) { const r = document.createRange(); r.setStart(ed, 0); r.setEnd(sel.anchorNode, sel.anchorOffset); pos = r.toString().length; }
+        const [nt, np] = fn(t, pos); ed.textContent = nt;
+        if (ed.firstChild) { const r = document.createRange(); r.setStart(ed.firstChild, Math.min(np, nt.length)); r.collapse(true); const g = getSelection(); g.removeAllRanges(); g.addRange(r); } };
+      document.getElementById("apos")?.addEventListener("click", () => edit((t, p) => [t.slice(0, p) + "'" + t.slice(p), p + 1]));
+      document.getElementById("bksp")?.addEventListener("click", () => edit((t, p) => p ? [t.slice(0, p - 1) + t.slice(p), p - 1] : [t, 0]));
+      document.getElementById("wipe")?.addEventListener("click", () => { ed.textContent = ""; });
+      ["apos", "bksp", "wipe"].forEach(id => document.getElementById(id)?.addEventListener("pointerdown", e => e.preventDefault()));
       try { ed.contentEditable = "plaintext-only"; } catch (e) {}
       if (ed.contentEditable !== "plaintext-only") ed.contentEditable = "true";
       ed.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("saisie").requestSubmit(); } });
