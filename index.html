@@ -858,6 +858,24 @@ window.__boot = () => {
     if (!user) return who();
     const niveau = niveauDe(user);
     if (!niveau) return chooseNiveau(user);
+    // Sans programme de la maîtresse pour ce niveau (ex. CE1) : pas de semaine. La leçon à revoir en haut,
+    // puis toutes les leçons par matière. « À revoir » = les paquets ajoutés en dernier (champ ajoute, AAAA-MM-JJ).
+    const mes = mesPaquets();
+    if (!Object.values(PROG).some(l => (l || []).some(e => mes.some(d => d.id === e.paquet)))) {
+      const dates = mes.map(d => d.ajoute).filter(Boolean).sort();
+      const der = dates.pop();
+      const aRevoir = der ? mes.filter(d => d.ajoute === der) : mes.slice(-1);
+      app.innerHTML = `<div class="view home">
+        <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
+        ${aRevoir.length ? `<section class="matiere"><h2>À revoir</h2><div class="decks">${deckButtons(aRevoir.map(deck => ({ deck })))}</div></section>` : ""}
+        ${parMatiere(mes.map(deck => ({ deck })), {})}
+        ${mes.length ? "" : '<p class="hint">Aucune leçon pour l\'instant.</p>'}
+        <p class="hint" id="sync">${esc(syncLabel())}</p>
+      </div>`;
+      document.getElementById("switch").onclick = () => { user = null; store.set("current", null); surSemaine = false; who(); };
+      bindDecks();
+      return;
+    }
     const today = todayIso(), cible = jourCible();
     const jours = semaine().map(date => {
       const e = entreesDu(date), n = nbLecons(e), d = fromIso(date);
@@ -1344,7 +1362,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-c";
+  const VERSION = "2026-11-09-d";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
