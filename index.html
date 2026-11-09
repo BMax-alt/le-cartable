@@ -278,7 +278,10 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .sheet.dictee .ligne { flex-direction: column; }
 .sheet.dictee .answer { position: static; width: min(760px, 100%); max-height: none; }
 .sheet.dictee .answer .fold { display: none; }
-.sheet.dictee .seyes { flex: 0 0 auto; width: min(760px, 100%); height: 192px; }
+.sheet.dictee .seyes { flex: 0 0 auto; width: min(760px, 100%); height: clamp(120px, 24vh, 192px); }
+/* Outils et « Vérifier » sur une seule ligne, pour que tout tienne même avec une longue question */
+.ligne-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.sheet.dictee { padding-top: 12px; padding-bottom: 12px; gap: 12px; }
 .sheet.dictee .seyes .ecrit { font-size: 64px; }
 /* Dictée bilan : une phrase entière, sur plusieurs lignes du cahier */
 .sheet.dictee.bilan .seyes { height: auto; min-height: 192px; }
@@ -1072,8 +1075,8 @@ window.__boot = () => {
         <div class="seyes${grand ? "" : " court"}"><div class="ecrit" id="rep" role="textbox" aria-label="${posee ? "Résultat" : trou ? "La réponse" : "Le mot"}"
           ${posee ? 'inputmode="decimal"' : ""} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
           data-ph="${trou ? "Écris ta réponse ici, au crayon" : bilan ? "Écris la phrase ici, au crayon" : grand ? "Écris le mot ici, au crayon" : "Écris le résultat ici"}" ${shown ? 'contenteditable="false"' : 'data-edit="1"'}>${shown ? esc(saisi || "") : bilan && brouillon ? esc(brouillon) : ""}</div><div class="ecrit probe" aria-hidden="true">Hg<i></i></div></div>
-        ${shown || posee ? "" : '<div class="outils"><button type="button" class="tool" id="apos" aria-label="Apostrophe">’</button><button type="button" class="tool" id="bksp">⌫ Une lettre</button><button type="button" class="tool" id="wipe">Tout effacer</button></div>'}
-        ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}
+        <div class="ligne-actions">${shown || posee ? "" : '<div class="outils"><button type="button" class="tool" id="apos" aria-label="Apostrophe">’</button><button type="button" class="tool" id="bksp">⌫ Une lettre</button><button type="button" class="tool" id="wipe">Tout effacer</button></div>'}
+        ${shown ? "" : '<button class="big g" type="submit">Vérifier</button>'}</div>
       </form>`;
     // Dictée et exercice à trou : c'est juste ou à revoir, pas de « presque ».
     const grades = () => grand || dic || trou
@@ -1364,7 +1367,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-f";
+  const VERSION = "2026-11-09-g";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
