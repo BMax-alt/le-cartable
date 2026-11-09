@@ -93,6 +93,7 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .deck.done { box-shadow: 0 0 0 3px var(--good), 0 6px 18px rgba(29,43,79,.08); }
 .deck .fait { color: var(--good); font-weight: 700; font-size: 16px; }
 .deck .pour { font-size: 15px; color: var(--muted); }
+.archives-btn { min-height: 0; align-self: flex-start; width: min(420px, 100%); }
 .serie { grid-column: 1 / -1; font-family: var(--display); font-weight: 600; font-size: 20px; margin: 6px 0 -4px; }
 .tag.eval { border-style: solid; }
 
@@ -754,7 +755,7 @@ window.__boot = () => {
   }
   function login(name) {
     if (!niveauDe(name)) return chooseNiveau(name);
-    user = name; store.set("current", name); home();
+    user = name; store.set("current", name); accueil();
   }
 
   /* ---------- Accueil ---------- */
@@ -830,7 +831,21 @@ window.__boot = () => {
   }
   // Après une séance, on revient là d'où l'on vient : le jour ou l'accueil.
   let retour = null;
-  const back = () => retour ? jour(retour) : home();
+  const back = () => retour === "archives" ? archives() : retour ? jour(retour) : home();
+
+  // Le jour qu'on prépare : le prochain jour (après aujourd'hui) qui a des leçons. Lundi soir, c'est mardi.
+  const jourCible = () => { const t = todayIso(); return semaine().find(x => x > t && entreesDu(x).length) || null; };
+  // À l'ouverture de l'app, on arrive directement sur ce jour-là (sinon sur la semaine).
+  let surSemaine = false;
+  function accueil() { const c = jourCible(); c && !surSemaine ? jour(c) : home(); }
+  // Une liste de paquets rangée par matière, dans l'ordre fixe des matières.
+  function parMatiere(entrees, opts) {
+    const ms = [...MATIERES, ...new Set(entrees.map(e => e.deck.matiere).filter(m => !MATIERES.includes(m)))];
+    return ms.map(m => {
+      const list = entrees.filter(e => e.deck.matiere === m);
+      return list.length ? `<section class="matiere"><h2>${esc(m)}</h2><div class="decks">${deckButtons(list, opts)}</div></section>` : "";
+    }).join("");
+  }
 
   function home() {
     letSleep();
@@ -838,9 +853,7 @@ window.__boot = () => {
     if (!user) return who();
     const niveau = niveauDe(user);
     if (!niveau) return chooseNiveau(user);
-    const today = todayIso();
-    // Le jour qu'on prépare : le prochain jour (après aujourd'hui) qui a des leçons. Lundi soir, c'est mardi.
-    const cible = semaine().find(x => x > today && entreesDu(x).length);
+    const today = todayIso(), cible = jourCible();
     const jours = semaine().map(date => {
       const e = entreesDu(date), n = nbLecons(e), d = fromIso(date);
       const cls = [n ? "" : "empty", date === cible ? "today" : "", date <= today ? "past" : "", n && jourFait(date) ? "done" : ""].filter(Boolean).join(" ");
@@ -848,38 +861,44 @@ window.__boot = () => {
         <small>à savoir pour</small><b>${JOURS[d.getDay()].slice(0, 3)}. ${d.getDate()}</b>
         <span class="n">${n ? (jourFait(date) ? "✓ Tout est fait" : plural(n, "leçon")) : "—"}</span></button>`;
     }).join("");
-    // En dessous : toutes les leçons, rangées par matière, avec leur date « à savoir pour ».
-    const archives = mesPaquets();
-    const autres = [...new Set(archives.map(d => d.matiere))].filter(m => !MATIERES.includes(m));
-    const groups = [...MATIERES, ...autres].map(m => {
-      const list = archives.filter(d => d.matiere === m);
-      if (!list.length) return "";
-      return `<section class="matiere"><h2>${esc(m)}</h2><div class="decks">${deckButtons(list.map(deck => ({ deck })), { archives: true })}</div></section>`;
-    }).join("");
     app.innerHTML = `<div class="view home">
       <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
+      <p class="hint">Ce qu'il faut savoir pour chaque jour de la semaine.</p>
       <section><div class="week">${jours}</div></section>
-      ${groups ? `<p class="hint">Toutes mes leçons, par matière.</p>${groups}` : ""}
+      <button class="deck archives-btn" id="archives"><strong>📚 Archives</strong><span>Toutes mes leçons, par matière</span></button>
       ${DECKS.length ? "" : '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
       <p class="hint" id="sync">${esc(syncLabel())}</p>
     </div>`;
-    document.getElementById("switch").onclick = () => { user = null; store.set("current", null); who(); };
+    document.getElementById("switch").onclick = () => { user = null; store.set("current", null); surSemaine = false; who(); };
     app.querySelectorAll(".day[data-date]").forEach(b => b.onclick = () => jour(b.dataset.date));
+    document.getElementById("archives").onclick = archives;
+  }
+
+  function archives() {
+    letSleep();
+    retour = "archives";
+    app.innerHTML = `<div class="view home">
+      <div class="topbar"><button class="back" id="week">← Semaine</button></div>
+      <div class="brand"><h1>Archives</h1></div>
+      <p class="hint">Toutes mes leçons, par matière, avec le jour où il fallait les savoir.</p>
+      ${parMatiere(mesPaquets().map(deck => ({ deck })), { archives: true }) || '<p class="hint">Aucune leçon pour l\'instant.</p>'}
+      <p class="hint" id="sync">${esc(syncLabel())}</p>
+    </div>`;
+    document.getElementById("week").onclick = () => { surSemaine = true; home(); };
     bindDecks();
   }
 
   function jour(date) {
     letSleep();
     retour = date;
-    const e = entreesDu(date);
     app.innerHTML = `<div class="view home">
       <div class="topbar"><button class="back" id="week">← Semaine</button></div>
       <div class="brand"><h1>Pour le ${esc(longDate(date))}</h1></div>
       <p class="hint">${jourFait(date) ? `Tout est fait, bravo ${esc(user)} !` : "Ce qu'il faut savoir ce jour-là. Révise-le avant !"}</p>
-      <div class="decks">${deckButtons(e, { date })}</div>
+      ${parMatiere(entreesDu(date), { date })}
       <p class="hint" id="sync">${esc(syncLabel())}</p>
     </div>`;
-    document.getElementById("week").onclick = home;
+    document.getElementById("week").onclick = () => { surSemaine = true; home(); };
     bindDecks();
   }
 
@@ -1319,10 +1338,10 @@ window.__boot = () => {
   // puis on va chercher la dernière version dans le coffre.
   if (!token()) return settings();
   // Premier lancement après la mise à jour : on attend la liste des élèves (et leur niveau) avant d'afficher.
-  if (eleves().length) { home(); loadEleves().then(() => { if (document.getElementById("newuser")) who(); }).catch(() => {}); }
-  else { app.innerHTML = '<div class="view who"><p class="hint">Chargement…</p></div>'; within(loadEleves().catch(() => {}), 8000).then(() => home()); }
+  if (eleves().length) { accueil(); loadEleves().then(() => { if (document.getElementById("newuser")) who(); }).catch(() => {}); }
+  else { app.innerHTML = '<div class="view who"><p class="hint">Chargement…</p></div>'; within(loadEleves().catch(() => {}), 8000).then(() => accueil()); }
   within(loadEleves().catch(() => {}), 8000).then(() => pullProgress()).then(() => { if (document.querySelector(".home")) back(); });
-  loadDecks().then(() => { if (document.querySelector(".home")) back(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
+  loadDecks().then(() => { if (document.querySelector(".home")) retour == null && !surSemaine ? accueil() : back(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
   syncNow();
 };
 </script>
