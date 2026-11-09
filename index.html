@@ -78,6 +78,22 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .deck .meta { color: var(--muted); font-size: 16px; margin-top: auto; }
 .tag { align-self: flex-start; background: var(--label); color: var(--accent-ink); font-size: 14px; padding: 2px 10px; border-radius: 99px; border: 1px dashed var(--accent); }
 .hint { color: var(--muted); font-size: 16px; max-width: 60ch; line-height: 1.5; }
+/* Semaine : ce qu'il faut savoir pour chaque jour de la fiche */
+.week { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.day { background: var(--paper); border-radius: 14px; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  box-shadow: 0 2px 0 var(--line), 0 6px 18px rgba(29,43,79,.08); border: 3px solid transparent; min-width: 0; }
+.day b { font-family: var(--display); font-weight: 800; font-size: clamp(18px, 3vw, 26px); }
+.day small { font-size: 13px; color: var(--muted); text-align: center; }
+.day .n { font-size: 15px; }
+.day.today { border-color: var(--accent); }
+.day.done { border-color: var(--good); }
+.day.done .n { color: var(--good); font-weight: 700; }
+.day.empty { opacity: .45; box-shadow: none; }
+.deck.done { box-shadow: 0 0 0 3px var(--good), 0 6px 18px rgba(29,43,79,.08); }
+.deck .fait { color: var(--good); font-weight: 700; font-size: 16px; }
+.deck .pour { font-size: 15px; color: var(--muted); }
+.serie { grid-column: 1 / -1; font-family: var(--display); font-weight: 600; font-size: 20px; margin: 6px 0 -4px; }
+.tag.eval { border-style: solid; }
 
 /* Séance */
 .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -278,6 +294,7 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 <script>
 window.__boot = () => {
   let DECKS = (() => { try { return JSON.parse(localStorage.getItem("cartable:paquets")) || []; } catch (e) { return []; } })();
+  let PROG = (() => { try { return JSON.parse(localStorage.getItem("cartable:programme")) || {}; } catch (e) { return {}; } })();
   const app = document.getElementById("app");
   // Le prénom et les scores restent sur cet iPad (stockage local), jamais en ligne.
   const store = {
@@ -314,6 +331,8 @@ window.__boot = () => {
     if (!r.ok) throw new Error("paquets " + r.status);
     const d = await r.json();
     DECKS = d; store.set("paquets", d);
+    // Programme de la semaine (ce qu'il faut savoir pour chaque jour) : facultatif.
+    try { const pr = await gh("programme.json", {}, "application/vnd.github.raw+json"); if (pr.ok) { PROG = await pr.json(); store.set("programme", PROG); } } catch (e) {}
     return d;
   }
   // Images du cours : téléchargées une fois, gardées sur l'iPad. Le cache ne doit jamais bloquer l'affichage :
@@ -714,41 +733,126 @@ window.__boot = () => {
   }
 
   /* ---------- Accueil ---------- */
-  function home() {
-    letSleep();
-    if (!user) return who();
-    const niveau = niveauDe(user);
-    if (!niveau) return chooseNiveau(user);
-    const byMatiere = {};
-    DECKS.filter(d => (d.niveau || "CM2") === niveau).forEach(d => (byMatiere[d.matiere] ||= []).push(d));
-    const groups = Object.keys(byMatiere).map(m => `
-      <section class="matiere">
-        <h2>${esc(m)}</h2>
-        <div class="decks">${byMatiere[m].map(d => {
-          const last = store.get("deck:" + user + ":" + d.id);
-          const enCours = seanceEnCours(d.id);
-          const meta = enCours ? `En cours : ${Object.keys(enCours.etat.grade).length}/${enCours.etat.order.length} · tour ${enCours.etat.round}`
-            : last ? `Dernière fois : ${last.first}/${last.total} du premier coup` : "Pas encore révisé";
-          return `<button class="deck" data-id="${esc(d.id)}">
-            ${d.exemple ? '<span class="tag">Exemple</span>' : ""}
-            <strong>${esc(d.titre)}</strong>
-            <span>${plural(d.cartes.length, d.dictee ? "mot" : "carte")}</span>
-            <span class="meta">${meta}</span>
-          </button>`;
-        }).join("")}</div>
-      </section>`).join("");
-    app.innerHTML = `<div class="view home">
-      <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
-      <p class="hint">Choisis une leçon et écris tes réponses au crayon.</p>
-      ${groups || '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
-      <p class="hint" id="sync">${esc(syncLabel())}</p>
-    </div>`;
-    document.getElementById("switch").onclick = () => { user = null; store.set("current", null); who(); };
+  /* ---------- Semaine et archives ---------- */
+  // programme.json : { "AAAA-MM-JJ": [{ paquet, evaluation? }] }, recopié de la fiche de la maîtresse.
+  // Chaque date dit ce qu'il faut SAVOIR ce jour-là (on le travaille avant).
+  const MATIERES = ["Histoire", "Français", "Maths", "Dictées", "Géographie", "Sciences de la matière", "SVT"];
+  const JOURS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+  const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  const dayIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const fromIso = x => { const [y, m, j] = x.split("-").map(Number); return new Date(y, m - 1, j); };
+  const addDays = (x, n) => { const d = fromIso(x); d.setDate(d.getDate() + n); return dayIso(d); };
+  const longDate = x => { const d = fromIso(x); return `${JOURS[d.getDay()].toLowerCase()} ${d.getDate()} ${MOIS[d.getMonth()]}`; };
+  const todayIso = () => dayIso(new Date());
+  // Du lundi au vendredi de la semaine en cours ; le samedi et le dimanche, la semaine qui vient.
+  function semaine() {
+    const d = new Date(); const w = d.getDay();
+    d.setDate(d.getDate() + (w === 6 ? 2 : w === 0 ? 1 : 1 - w));
+    return [0, 1, 2, 3, 4].map(k => addDays(dayIso(d), k));
+  }
+  const mesPaquets = () => DECKS.filter(d => (d.niveau || "CM2") === niveauDe(user));
+  const entreesDu = date => (PROG[date] || []).map(e => ({ ...e, deck: mesPaquets().find(d => d.id === e.paquet) })).filter(e => e.deck);
+  const datesDe = id => Object.keys(PROG).filter(x => (PROG[x] || []).some(e => e.paquet === id)).sort();
+  // Une séance compte quand elle est allée au bout de toutes les cartes du paquet.
+  // (complet : posé à la fin d'une séance entière ; pour les séances plus anciennes, on se fie au nombre de cartes
+  // ou au résumé « Dernière fois », qui n'est écrit que pour une séance entière, même si le paquet a changé depuis.)
+  const finies = deck => {
+    const last = store.get("deck:" + user + ":" + deck.id);
+    return Object.values(localProg(user).seances)
+      .filter(sc => sc.paquet === deck.id && sc.fin && !sc.abandon && sc.premierCoup != null
+        && (sc.complet || sc.cartes === deck.cartes.length || (last && last.date === sc.fin.slice(0, 10) && last.total === sc.cartes)))
+      .map(sc => dayIso(new Date(sc.fin)));
+  };
+  const fait = deck => finies(deck).length > 0;
+  // Fait pour un jour : terminé depuis la date précédente où le paquet était à savoir (au plus 7 jours avant), jusqu'au jour même.
+  function faitPour(deck, date) {
+    const avant = datesDe(deck.id).filter(x => x < date).pop();
+    const debut = [avant, addDays(date, -7)].filter(Boolean).sort().pop();
+    return finies(deck).some(x => x >= debut && x <= date);
+  }
+  const jourFait = date => { const e = entreesDu(date); return e.length > 0 && e.every(x => faitPour(x.deck, date)); };
+  // Une dictée (plusieurs groupes) compte pour une seule leçon.
+  const nbLecons = entrees => new Set(entrees.map(e => e.deck.serie || e.deck.id)).size;
+
+  function deckButtons(list, opts = {}) {
+    let serie = null;
+    return list.map(({ deck: d, evaluation }) => {
+      const last = store.get("deck:" + user + ":" + d.id);
+      const enCours = seanceEnCours(d.id);
+      const ok = opts.date ? faitPour(d, opts.date) : fait(d);
+      const meta = enCours ? `En cours : ${Object.keys(enCours.etat.grade).length}/${enCours.etat.order.length} · tour ${enCours.etat.round}`
+        : last ? `Dernière fois : ${last.first}/${last.total} du premier coup` : "Pas encore révisé";
+      const pour = opts.archives ? datesDe(d.id).pop() : null;
+      const head = d.serie && d.serie !== serie ? `<h3 class="serie">${esc(d.serie)}</h3>` : "";
+      serie = d.serie || null;
+      return `${head}<button class="deck${ok ? " done" : ""}" data-id="${esc(d.id)}">
+          ${evaluation ? '<span class="tag eval">Évaluation</span>' : ""}
+          <strong>${esc(d.serie && d.groupe ? "Groupe " + d.groupe : d.titre)}</strong>
+          <span>${plural(d.cartes.length, d.dictee ? (d.bilan ? "phrase" : "mot") : "carte")}</span>
+          ${pour ? `<span class="pour">À savoir pour le ${esc(longDate(pour))}</span>` : ""}
+          ${ok ? '<span class="fait">✓ Fait</span>' : ""}
+          <span class="meta">${meta}</span>
+        </button>`;
+    }).join("");
+  }
+  function bindDecks() {
     app.querySelectorAll(".deck").forEach(b => b.addEventListener("click", () => {
       const d = DECKS.find(x => x.id === b.dataset.id);
       const enCours = seanceEnCours(d.id);
       enCours ? askResume(d, enCours) : start(d, d.cartes.map((_, i) => i));
     }));
+  }
+  // Après une séance, on revient là d'où l'on vient : le jour ou l'accueil.
+  let retour = null;
+  const back = () => retour ? jour(retour) : home();
+
+  function home() {
+    letSleep();
+    retour = null;
+    if (!user) return who();
+    const niveau = niveauDe(user);
+    if (!niveau) return chooseNiveau(user);
+    const today = todayIso();
+    const jours = semaine().map(date => {
+      const e = entreesDu(date), n = nbLecons(e), d = fromIso(date);
+      const cls = [n ? "" : "empty", date === today ? "today" : "", n && jourFait(date) ? "done" : ""].filter(Boolean).join(" ");
+      return `<button class="day ${cls}" data-date="${date}" ${n ? "" : "disabled"}>
+        <small>à savoir pour</small><b>${JOURS[d.getDay()].slice(0, 3)}. ${d.getDate()}</b>
+        <span class="n">${n ? (jourFait(date) ? "✓ Tout est fait" : plural(n, "leçon")) : "—"}</span></button>`;
+    }).join("");
+    // Archives : les paquets qui ne sont plus à savoir pour aujourd'hui ou plus tard.
+    const archives = mesPaquets().filter(d => !datesDe(d.id).some(x => x >= today));
+    const autres = [...new Set(archives.map(d => d.matiere))].filter(m => !MATIERES.includes(m));
+    const groups = [...MATIERES, ...autres].map(m => {
+      const list = archives.filter(d => d.matiere === m);
+      if (!list.length) return "";
+      return `<section class="matiere"><h2>${esc(m)}</h2><div class="decks">${deckButtons(list.map(deck => ({ deck })), { archives: true })}</div></section>`;
+    }).join("");
+    app.innerHTML = `<div class="view home">
+      <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
+      <section><div class="week">${jours}</div></section>
+      ${groups ? `<p class="hint">Les archives : toutes les leçons déjà passées, par matière.</p>${groups}` : ""}
+      ${DECKS.length ? "" : '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
+      <p class="hint" id="sync">${esc(syncLabel())}</p>
+    </div>`;
+    document.getElementById("switch").onclick = () => { user = null; store.set("current", null); who(); };
+    app.querySelectorAll(".day[data-date]").forEach(b => b.onclick = () => jour(b.dataset.date));
+    bindDecks();
+  }
+
+  function jour(date) {
+    letSleep();
+    retour = date;
+    const e = entreesDu(date);
+    app.innerHTML = `<div class="view home">
+      <div class="topbar"><button class="back" id="week">← Semaine</button></div>
+      <div class="brand"><h1>Pour le ${esc(longDate(date))}</h1></div>
+      <p class="hint">${jourFait(date) ? `Tout est fait, bravo ${esc(user)} !` : "Ce qu'il faut savoir ce jour-là. Révise-le avant !"}</p>
+      <div class="decks">${deckButtons(e, { date })}</div>
+      <p class="hint" id="sync">${esc(syncLabel())}</p>
+    </div>`;
+    document.getElementById("week").onclick = home;
+    bindDecks();
   }
 
   /* ---------- Séance ---------- */
@@ -836,7 +940,7 @@ window.__boot = () => {
         </div>
       </div>`;
     const navBind = go => {
-      document.getElementById("quit").onclick = () => { closeCours(); keep(s); home(); };
+      document.getElementById("quit").onclick = () => { closeCours(); keep(s); back(); };
       document.getElementById("prev").onclick = () => s.pos > 0 && go(s.pos - 1);
       document.getElementById("next").onclick = () => s.pos < s.order.length - 1 && go(s.pos + 1);
       document.querySelectorAll("#dots .dot").forEach(b => b.onclick = () => go(+b.dataset.k));
@@ -954,7 +1058,7 @@ window.__boot = () => {
     document.getElementById("undo")?.addEventListener("click", pad.undo);
     document.getElementById("clear")?.addEventListener("click", pad.clear);
     navBind(go);
-    document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); closeCours(); keep(s); home(); };
+    document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); closeCours(); keep(s); back(); };
     if (dic) {
       document.getElementById("say").onclick = () => dictate(c);
       if (c.phrase) document.getElementById("sayphrase").onclick = () => sayPhrase(c);
@@ -1019,13 +1123,14 @@ window.__boot = () => {
     </div>`;
     document.getElementById("goon").onclick = () => { s.round++; newRound(s, left); persist(s); card(s); };
     // « Plus tard » : le tour suivant est prêt, on le reprendra depuis l'accueil.
-    document.getElementById("stop").onclick = () => { s.round++; newRound(s, left); persist(s); home(); };
+    document.getElementById("stop").onclick = () => { s.round++; newRound(s, left); persist(s); back(); };
   }
 
   function saveScore(s) {
     const firstOk = Object.keys(s.first).filter(i => s.first[i] === 2).length;
     if (!s.partial) store.set("deck:" + user + ":" + s.deck.id, { first: firstOk, total: s.total, date: new Date().toISOString().slice(0, 10) });
     s.seance.fin = new Date().toISOString(); s.seance.tours = s.round; s.seance.premierCoup = firstOk;
+    if (!s.partial) s.seance.complet = true;
     delete s.seance.etat; store.set(inkKey(s.seance), null);
     saveSeance(user, s.seance); syncNow();
     return firstOk;
@@ -1055,7 +1160,7 @@ window.__boot = () => {
     </div>`;
     confetti();
     document.getElementById("again").onclick = () => start(s.deck, s.deck.cartes.map((_, i) => i));
-    document.getElementById("home").onclick = home;
+    document.getElementById("home").onclick = back;
     if (hard.length) document.getElementById("hard").onclick = () => start(s.deck, hard);
   }
 
@@ -1124,8 +1229,8 @@ window.__boot = () => {
   // Premier lancement après la mise à jour : on attend la liste des élèves (et leur niveau) avant d'afficher.
   if (eleves().length) { home(); loadEleves().then(() => { if (document.getElementById("newuser")) who(); }).catch(() => {}); }
   else { app.innerHTML = '<div class="view who"><p class="hint">Chargement…</p></div>'; within(loadEleves().catch(() => {}), 8000).then(() => home()); }
-  within(loadEleves().catch(() => {}), 8000).then(() => pullProgress()).then(() => { if (document.querySelector(".home")) home(); });
-  loadDecks().then(() => { if (document.querySelector(".home")) home(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
+  within(loadEleves().catch(() => {}), 8000).then(() => pullProgress()).then(() => { if (document.querySelector(".home")) back(); });
+  loadDecks().then(() => { if (document.querySelector(".home")) back(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
   syncNow();
 };
 </script>
