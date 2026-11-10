@@ -1290,7 +1290,7 @@ window.__boot = () => {
       </div>`;
       // QCM avec brouillon : une feuille pour chercher (tableau, arbre) avant de choisir.
       s.ink[idx] ||= [];
-      s.outils ||= { droit: !!(s.deck.dessin || c.dessin), equerre: false };
+      s.outils ||= { droit: false, pointilles: false, equerre: false }; if ((s.deck.dessin || c.dessin) && s.outils.carte !== idx) { s.outils.droit = true; s.outils.carte = idx; }
       const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], s.outils) : { stop() {}, undo() {}, clear() {} };
       document.getElementById("undo")?.addEventListener("click", qpad.undo);
       document.getElementById("clear")?.addEventListener("click", qpad.clear);
@@ -1401,7 +1401,7 @@ window.__boot = () => {
     }
     alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
-    s.outils ||= { droit: !!(s.deck.dessin || c.dessin), equerre: false };
+    s.outils ||= { droit: false, pointilles: false, equerre: false }; if ((s.deck.dessin || c.dessin) && s.outils.carte !== idx) { s.outils.droit = true; s.outils.carte = idx; }
     const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], s.outils);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
     document.getElementById("undo")?.addEventListener("click", pad.undo);
@@ -1560,7 +1560,7 @@ window.__boot = () => {
   /* ---------- Zone d'écriture au crayon ---------- */
   /* ---------- Dessin géométrique : traits droits aimantés et équerre ---------- */
   // « Traits droits » : un trait tracé à main levée devient un segment net. Ses deux bouts sont aimantés
-  // sur les carreaux de la feuille (12 px, les lignes Seyès) ou sur le bout d'un segment déjà tracé,
+  // sur les lignes de la feuille Seyès (tous les 12 px, un quart de carreau) ou sur le bout d'un segment déjà tracé,
   // et sa direction sur l'horizontale, la verticale ou la diagonale (45°) quand elle en est proche.
   // Les longueurs tombent donc pile sur les carreaux : pas d'à-peu-près. Un tracé courbe (écriture) reste tel quel.
   // « Équerre » : une équerre posée sur la feuille, qu'on déplace (poignée du milieu) et qu'on tourne (poignée du bout),
@@ -1660,16 +1660,17 @@ window.__boot = () => {
     const sheet = cv.parentElement, tools = sheet.querySelector(".tools");
     let eq = null;
     if (outils && tools) {
-      const bD = document.createElement("button"), bE = document.createElement("button");
-      bD.className = "tool"; bD.textContent = "Traits droits"; bE.className = "tool"; bE.textContent = "Équerre";
+      const bD = document.createElement("button"), bP = document.createElement("button"), bE = document.createElement("button");
+      bD.className = bP.className = bE.className = "tool"; bD.textContent = "Traits droits"; bP.textContent = "Pointillés"; bE.textContent = "Équerre";
       const maj = () => {
-        bD.classList.toggle("on", !!outils.droit); bE.classList.toggle("on", !!outils.equerre);
+        bD.classList.toggle("on", !!outils.droit); bP.classList.toggle("on", !!outils.pointilles); bE.classList.toggle("on", !!outils.equerre);
         if (outils.equerre && !eq) { outils.eq ||= { x: X0 + 4 * CARREAU, y: Y0 + 6 * CARREAU, a: 0 }; eq = equerre(sheet, outils.eq); }
         if (!outils.equerre && eq) { eq.el.remove(); eq = null; }
       };
       bD.onclick = () => { outils.droit = !outils.droit; maj(); };
+      bP.onclick = () => { outils.pointilles = !outils.pointilles; maj(); };
       bE.onclick = () => { outils.equerre = !outils.equerre; maj(); };
-      tools.prepend(bD, bE);
+      tools.prepend(bD, bP, bE);
       maj();
     }
     let current = null, penSeen = false, w = 0, h = 0, rect = null;
@@ -1690,6 +1691,13 @@ window.__boot = () => {
       ctx.clearRect(0, 0, w, h);
       ctx.strokeStyle = ink; ctx.lineCap = "round"; ctx.lineJoin = "round";
       for (const st of strokes) {
+        // Trait en pointillés (arêtes cachées) : repéré par d sur son premier point, tracé d'un seul chemin.
+        if (st[0]?.d && st.length > 1) {
+          ctx.save(); ctx.setLineDash([7, 6]); ctx.lineCap = "butt";
+          ctx.lineWidth = 1.2 + 3.2 * (st.reduce((m, q) => m + q.p, 0) / st.length);
+          ctx.beginPath(); ctx.moveTo(st[0].x, st[0].y); for (const q of st.slice(1)) ctx.lineTo(q.x, q.y); ctx.stroke();
+          ctx.restore(); continue;
+        }
         if (st.length === 1) { ctx.beginPath(); ctx.arc(st[0].x, st[0].y, 1.6, 0, 7); ctx.fillStyle = ink; ctx.fill(); }
         for (let i = 1; i < st.length; i++) seg(st[i - 1], st[i]);
       }
@@ -1702,7 +1710,7 @@ window.__boot = () => {
       if (!allowed(e)) return;
       e.preventDefault(); rect = cv.getBoundingClientRect();
       try { cv.setPointerCapture(e.pointerId); } catch (err) {}
-      current = [pt(e)]; strokes.push(current); redraw();
+      current = [pt(e)]; if (outils?.pointilles) current[0].d = 1; strokes.push(current); redraw();
     });
     cv.addEventListener("pointermove", e => {
       if (!current || !allowed(e)) return;
@@ -1714,8 +1722,9 @@ window.__boot = () => {
     const up = () => {
       if (current && outils?.droit && current.length > 1) {
         const net = redresser(current, strokes.slice(0, -1), eq);
-        if (net) { current.length = 0; current.push(...net); redraw(); }
+        if (net) { if (current[0].d) net[0].d = 1; current.length = 0; current.push(...net); }
       }
+      if (current) redraw(); // trait redressé ou pointillés : on le redessine propre
       current = null;
     };
     cv.addEventListener("pointerup", up);
@@ -1740,7 +1749,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-e";
+  const VERSION = "2026-11-10-f";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
