@@ -1604,11 +1604,13 @@ window.__boot = () => {
   // « Équerre » : une équerre posée sur la feuille, qu'on déplace (poignée du milieu) et qu'on tourne (poignée du bout),
   // aimantée sur les carreaux et sur les angles ronds. Un trait tiré le long d'un bord se colle à ce bord.
   const CARREAU = 12, X0 = 65, Y0 = 11; // mêmes repères que le fond Seyès de .sheet
-  const noeud = p => ({ x: X0 + Math.round((p.x - X0) / CARREAU) * CARREAU, y: Y0 + Math.round((p.y - Y0) / CARREAU) * CARREAU });
+  // Aimant de la grille : tous les demi-carreaux (24 px). Un crayon qui dépasse un peu revient pile sur le carreau (Ben, 10/11).
+  const PAS = 2 * CARREAU, AIMANT_COIN = 20;
+  const noeud = p => ({ x: X0 + Math.round((p.x - X0) / PAS) * PAS, y: Y0 + Math.round((p.y - Y0) / PAS) * PAS });
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   function bouts(strokes) { const l = []; for (const st of strokes) if (st.length === 2) l.push(st[0], st[1]); return l; }
   function aimant(p, strokes) {
-    let best = null, d = 10;
+    let best = null, d = AIMANT_COIN; // un coin déjà tracé attire plus fort que la grille
     for (const q of bouts(strokes)) { const e = dist(p, q); if (e < d) { d = e; best = q; } }
     return best ? { x: best.x, y: best.y } : noeud(p);
   }
@@ -1630,21 +1632,30 @@ window.__boot = () => {
       if (ecart(a) > 16 || ecart(b) > 16) continue;
       const t = p => (p.x - u.x) * ux + (p.y - u.y) * uy;
       // Départ sur une graduation de l'équerre (un carreau), ou sur le bout d'un segment déjà posé sur ce bord.
-      const ta = Math.round(Math.max(0, Math.min(L, t(a))) / CARREAU) * CARREAU, tb = Math.max(0, Math.min(L, t(b)));
+      const ta = Math.round(Math.max(0, Math.min(L, t(a))) / PAS) * PAS, tb = Math.max(0, Math.min(L, t(b)));
       let s = { x: u.x + ux * ta, y: u.y + uy * ta };
-      for (const q of bouts(strokes)) if (dist(q, s) < 10 && ecart(q) < 1) { s = { x: q.x, y: q.y }; break; }
-      const k = Math.max(1, Math.round(Math.abs(tb - ta) / CARREAU)) * Math.sign(tb - ta || 1);
-      return [{ ...s, p: pr }, { x: s.x + ux * k * CARREAU, y: s.y + uy * k * CARREAU, p: pr }];
+      for (const q of bouts(strokes)) if (dist(q, s) < AIMANT_COIN && ecart(q) < 1) { s = { x: q.x, y: q.y }; break; }
+      const k = Math.max(1, Math.round(Math.abs(tb - ta) / PAS)) * Math.sign(tb - ta || 1);
+      let e = { x: s.x + ux * k * PAS, y: s.y + uy * k * PAS };
+      for (const q of bouts(strokes)) if (dist(q, b) < AIMANT_COIN && ecart(q) < 1 && dist(q, s) > 1) { e = { x: q.x, y: q.y }; break; }
+      return [{ ...s, p: pr }, { ...e, p: pr }];
     }
     const s = aimant(a, strokes);
     const dx = b.x - s.x, dy = b.y - s.y, ang = Math.atan2(dy, dx), cran = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
     let e;
     if (Math.abs(ang - cran) < 8 * Math.PI / 180) {
-      const ux = Math.round(Math.cos(cran)), uy = Math.round(Math.sin(cran)); // pas de 1 carreau en x et/ou en y
-      const pas = Math.hypot(ux, uy) * CARREAU;
+      const ux = Math.round(Math.cos(cran)), uy = Math.round(Math.sin(cran)); // pas d'un demi-carreau en x et/ou en y
+      const pas = Math.hypot(ux, uy) * PAS;
       const k = Math.max(1, Math.round(Math.hypot(dx, dy) / pas));
-      e = { x: s.x + ux * k * CARREAU, y: s.y + uy * k * CARREAU };
-      const pres = aimant(e, strokes); if (dist(pres, e) < 4) e = pres;
+      e = { x: s.x + ux * k * PAS, y: s.y + uy * k * PAS };
+      // Un coin déjà tracé dans cette direction, près de là où le crayon s'arrête : on s'y arrête pile.
+      let best = null, d = AIMANT_COIN;
+      for (const q of bouts(strokes)) {
+        const vx = q.x - s.x, vy = q.y - s.y, L = Math.hypot(vx, vy);
+        if (L < 1 || Math.abs(vx * uy - vy * ux) / Math.hypot(ux, uy) > 1 || vx * ux + vy * uy <= 0) continue;
+        const ecart = dist(q, b); if (ecart < d) { d = ecart; best = q; }
+      }
+      if (best) e = { x: best.x, y: best.y };
     } else e = aimant(b, strokes);
     if (e.x === s.x && e.y === s.y) return null;
     return [{ ...s, p: pr }, { ...e, p: pr }];
@@ -1698,17 +1709,18 @@ window.__boot = () => {
     const sheet = cv.parentElement, tools = sheet.querySelector(".tools");
     let eq = null;
     if (outils && tools) {
-      const bD = document.createElement("button"), bP = document.createElement("button"), bE = document.createElement("button");
-      bD.className = bP.className = bE.className = "tool"; bD.textContent = "Traits droits"; bP.textContent = "Pointillés"; bE.textContent = "Équerre";
+      const bD = document.createElement("button"), bP = document.createElement("button"), bE = document.createElement("button"), bG = document.createElement("button");
+      bD.className = bP.className = bE.className = bG.className = "tool"; bD.textContent = "Traits droits"; bP.textContent = "Pointillés"; bE.textContent = "Équerre"; bG.textContent = "Gomme";
       const maj = () => {
-        bD.classList.toggle("on", !!outils.droit); bP.classList.toggle("on", !!outils.pointilles); bE.classList.toggle("on", !!outils.equerre);
+        bD.classList.toggle("on", !!outils.droit); bP.classList.toggle("on", !!outils.pointilles); bE.classList.toggle("on", !!outils.equerre); bG.classList.toggle("on", !!outils.gomme);
         if (outils.equerre && !eq) { outils.eq ||= { x: X0 + 4 * CARREAU, y: Y0 + 6 * CARREAU, a: 0 }; eq = equerre(sheet, outils.eq); }
         if (!outils.equerre && eq) { eq.el.remove(); eq = null; }
       };
       bD.onclick = () => { outils.droit = !outils.droit; maj(); };
       bP.onclick = () => { outils.pointilles = !outils.pointilles; maj(); };
       bE.onclick = () => { outils.equerre = !outils.equerre; maj(); };
-      tools.prepend(bD, bP, bE);
+      bG.onclick = () => { outils.gomme = !outils.gomme; maj(); };
+      tools.prepend(bD, bP, bE, bG);
       maj();
     }
     let current = null, penSeen = false, w = 0, h = 0, rect = null;
@@ -1744,13 +1756,25 @@ window.__boot = () => {
     const pt = e => { const r = rect || cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pointerType === "pen" ? (e.pressure || 0.5) : 0.5 }; };
     const allowed = e => { if (e.pointerType === "pen") penSeen = true; return !(penSeen && e.pointerType === "touch"); };
 
+    // Gomme : chaque trait touché s'efface en entier (on le refait ensuite proprement).
+    let gommer = false;
+    const prochePt = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy; const u = L2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0; return Math.hypot(p.x - a.x - u * dx, p.y - a.y - u * dy); };
+    const gommeEn = p => {
+      let n = strokes.length;
+      for (let i = strokes.length - 1; i >= 0; i--) { const st = strokes[i];
+        const touche = st.length === 1 ? dist(p, st[0]) < 10 : st.some((q, k) => k > 0 && prochePt(p, st[k - 1], q) < 10);
+        if (touche) strokes.splice(i, 1); }
+      if (strokes.length !== n) redraw();
+    };
     cv.addEventListener("pointerdown", e => {
       if (!allowed(e)) return;
       e.preventDefault(); rect = cv.getBoundingClientRect();
       try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+      if (outils?.gomme) { gommer = true; gommeEn(pt(e)); return; }
       current = [pt(e)]; if (outils?.pointilles) current[0].d = 1; strokes.push(current); redraw();
     });
     cv.addEventListener("pointermove", e => {
+      if (gommer && allowed(e)) { e.preventDefault(); (e.getCoalescedEvents ? e.getCoalescedEvents() : [e]).forEach(ce => gommeEn(pt(ce))); return; }
       if (!current || !allowed(e)) return;
       e.preventDefault();
       const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
@@ -1758,6 +1782,7 @@ window.__boot = () => {
       for (const ce of evs) { const p = pt(ce); seg(current[current.length - 1], p); current.push(p); }
     });
     const up = () => {
+      gommer = false;
       if (current && outils?.droit && current.length > 1) {
         const net = redresser(current, strokes.slice(0, -1), eq);
         if (net) { if (current[0].d) net[0].d = 1; current.length = 0; current.push(...net); }
@@ -1787,7 +1812,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-j";
+  const VERSION = "2026-11-10-k";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
