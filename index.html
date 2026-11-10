@@ -1022,35 +1022,61 @@ window.__boot = () => {
   // Un tour = toutes les cartes dans l'ordre, navigation libre. Les cartes pas sues repassent au tour suivant.
   // La séance garde son état (tour, cartes notées, réponses écrites) : on peut quitter et reprendre.
   // Les traits de crayon restent sur cet iPad seulement (trop lourds pour la sauvegarde).
+  // Chaque carte porte un identifiant unique dans tout le coffre (c1, c2…), jamais montré à l'élève.
+  // La progression suit l'identifiant : une carte ajoutée, retirée ou déplacée ne décale plus la reprise.
+  // « ordre0 » (sur les paquets d'avant les identifiants) = l'ordre des cartes à ce moment-là,
+  // pour relire les anciennes séances qui ne notaient que la position de la carte.
+  const cid = (deck, i) => deck.cartes[i]?.id || "#" + i;
+  const idsDe = deck => deck.cartes.map((_, i) => cid(deck, i));
+  function positions(deck) { const p = {}; deck.cartes.forEach((_, i) => p[cid(deck, i)] = i); return p; }
+  // Traduit une position ancienne (selon la liste d'identifiants « avant ») en position actuelle.
+  function traducteur(deck, avant) {
+    const p = positions(deck);
+    const m = i => { const j = p[avant[i]]; return j == null ? null : j; };
+    const liste = a => (a || []).map(m).filter(j => j != null);
+    const dico = o => { const r = {}; for (const k in o || {}) { const j = m(+k); if (j != null) r[j] = o[k]; } return r; };
+    return { m, liste, dico };
+  }
+  // État de reprise recalé sur l'ordre actuel des cartes.
+  function recaler(e, deck) {
+    const avant = e.ids || deck.ordre0 || idsDe(deck);
+    const t = traducteur(deck, avant);
+    return { ...e, indices: t.liste(e.indices), order: t.liste(e.order), grade: t.dico(e.grade), first: t.dico(e.first), saisie: t.dico(e.saisie),
+      shown: t.dico(e.shown), pick: t.dico(e.pick), essais: t.dico(e.essais), brouillon: t.dico(e.brouillon), ids: idsDe(deck), idsAvant: avant };
+  }
   function seanceEnCours(deckId) {
     if (!user) return null;
     const sc = Object.values(localProg(user).seances).filter(sc => sc.paquet === deckId && !sc.fin && sc.reponses?.length)
       .sort((a, b) => a.debut < b.debut ? 1 : -1)[0];
     if (!sc) return null;
-    if (!sc.etat) { const deck = DECKS.find(d => d.id === deckId); if (!deck) return null; sc.etat = rebuildEtat(sc, deck); }
+    const deck = DECKS.find(d => d.id === deckId); if (!deck) return null;
+    sc.etat = sc.etat ? recaler(sc.etat, deck) : rebuildEtat(sc, deck);
     return sc;
   }
   // Séance enregistrée avant l'ajout de la reprise (pas d'état) : on reconstruit l'état à partir des réponses.
   function rebuildEtat(sc, deck) {
     const indices = deck.cartes.map((_, i) => i);
+    const p = positions(deck), avant = deck.ordre0 || idsDe(deck);
+    const ix = r => p[r.id ?? avant[r.carte]];
     const round = Math.max(1, ...sc.reponses.map(r => r.tour || 1));
     const first = {}, grade = {}, saisie = {}, shown = {};
     sc.reponses.forEach(r => {
-      if ((r.tour || 1) === 1 && first[r.carte] == null) first[r.carte] = r.note;
-      if ((r.tour || 1) === round) { grade[r.carte] = r.note; shown[r.carte] = true; if (r.saisie != null) saisie[r.carte] = r.saisie; }
+      const k = ix(r); if (k == null) return;
+      if ((r.tour || 1) === 1 && first[k] == null) first[k] = r.note;
+      if ((r.tour || 1) === round) { grade[k] = r.note; shown[k] = true; if (r.saisie != null) saisie[k] = r.saisie; }
     });
     let order = indices;
     if (round > 1) {
-      const last = {}; sc.reponses.filter(r => (r.tour || 1) === round - 1).forEach(r => last[r.carte] = r.note);
+      const last = {}; sc.reponses.filter(r => (r.tour || 1) === round - 1).forEach(r => { const k = ix(r); if (k != null) last[k] = r.note; });
       order = indices.filter(i => last[i] !== 2);
     }
-    return { indices, round, order, pos: 0, grade, first, saisie, shown, pick: {}, streak: 0 };
+    return { indices, round, order, pos: 0, grade, first, saisie, shown, pick: {}, streak: 0, ids: idsDe(deck), idsAvant: avant };
   }
   const inkKey = sc => "ink:" + user + ":" + sc.id;
   // En naviguant : on garde l'état si la séance a déjà commencé (sinon rien à reprendre).
   function keep(s) { if (s.seance.reponses.length) persist(s); else store.set(inkKey(s.seance), s.ink); }
   function persist(s) {
-    s.seance.etat = { indices: s.indices, round: s.round, order: s.order, pos: s.pos, grade: s.grade, first: s.first, saisie: s.saisie, shown: s.shown, pick: s.pick, streak: s.streak, essais: s.essais, brouillon: s.brouillon };
+    s.seance.etat = { ids: idsDe(s.deck), indices: s.indices, round: s.round, order: s.order, pos: s.pos, grade: s.grade, first: s.first, saisie: s.saisie, shown: s.shown, pick: s.pick, streak: s.streak, essais: s.essais, brouillon: s.brouillon };
     saveSeance(user, s.seance);
     store.set(inkKey(s.seance), s.ink);
   }
@@ -1069,7 +1095,8 @@ window.__boot = () => {
     const e = sc.etat;
     const s = { deck, indices: e.indices, total: e.indices.length, partial: e.indices.length !== deck.cartes.length, round: e.round, first: e.first || {}, streak: e.streak || 0, best: 0, seance: sc };
     s.order = e.order; s.grade = e.grade || {}; s.saisie = e.saisie || {}; s.shown = e.shown || {}; s.pick = e.pick || {}; s.auto = {}; s.essais = e.essais || {}; s.brouillon = e.brouillon || {};
-    s.ink = store.get(inkKey(sc)) || {};
+    // Les traits de crayon étaient rangés selon l'ancien ordre des cartes : on les recale aussi.
+    s.ink = e.idsAvant ? traducteur(deck, e.idsAvant).dico(store.get(inkKey(sc))) : (store.get(inkKey(sc)) || {});
     const next = s.order.findIndex(i => s.grade[i] == null);
     s.pos = next >= 0 ? next : Math.min(e.pos || 0, s.order.length - 1);
     card(s);
@@ -1296,7 +1323,7 @@ window.__boot = () => {
     const regrade = s.grade[idx] != null;
     s.grade[idx] = v;
     // Trace de chaque réponse (note 2 = sue, 1 = presque, 0 = à revoir ; auto = corrigée par l'app).
-    s.seance.reponses.push({ t: new Date().toISOString(), carte: idx, tour: s.round, note: v, ...(extra.auto ? { auto: true } : {}), ...(extra.saisie != null ? { saisie: extra.saisie } : {}) });
+    s.seance.reponses.push({ t: new Date().toISOString(), carte: idx, id: cid(s.deck, idx), tour: s.round, note: v, ...(extra.auto ? { auto: true } : {}), ...(extra.saisie != null ? { saisie: extra.saisie } : {}) });
     if (s.round === 1 && s.first[idx] == null) s.first[idx] = v;
     persist(s);
     if (!regrade) {
@@ -1464,7 +1491,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-a";
+  const VERSION = "2026-11-10-b";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
