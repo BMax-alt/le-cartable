@@ -1491,7 +1491,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-b";
+  const VERSION = "2026-11-10-c";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
@@ -1516,5 +1516,9 @@ window.__boot = () => {
 };
 </script>
 <script>window.__boot();</script>
+<script>
+// Ouverture sans réseau : la page et ses fichiers sont gardés sur l'appareil (sw.js), la version en ligne passe toujours d'abord.
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
 </body>
 </html>
