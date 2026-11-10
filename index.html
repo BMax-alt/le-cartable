@@ -1629,9 +1629,10 @@ window.__boot = () => {
   // Les longueurs tombent donc pile sur les carreaux : pas d'à-peu-près. Un tracé courbe (écriture) reste tel quel.
   // « Équerre » : une équerre posée sur la feuille, qu'on déplace (poignée du milieu) et qu'on tourne (poignée du bout),
   // aimantée sur les carreaux et sur les angles ronds. Un trait tiré le long d'un bord se colle à ce bord.
-  const CARREAU = 12, X0 = 65, Y0 = 11; // mêmes repères que le fond Seyès de .sheet
-  // Aimant de la grille : tous les demi-carreaux (24 px). Un crayon qui dépasse un peu revient pile sur le carreau (Ben, 10/11).
-  const PAS = 2 * CARREAU, AIMANT_COIN = 20;
+  const CARREAU = 12, X0 = 65, Y0 = 47; // repères du fond Seyès de .sheet : X0 = 1re ligne verticale, Y0 = 1re grosse ligne horizontale
+  // Aimant de la grille : les coins des grands carreaux (48 px), là où se croisent les lignes principales
+  // (Ben, 10/11 : « les traits ne commencent pas sur les lignes principales »). Un crayon qui dépasse revient pile sur le carreau.
+  const PAS = 4 * CARREAU, AIMANT_COIN = 20;
   const noeud = p => ({ x: X0 + Math.round((p.x - X0) / PAS) * PAS, y: Y0 + Math.round((p.y - Y0) / PAS) * PAS });
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   function bouts(strokes) { const l = []; for (const st of strokes) if (st.length === 2) l.push(st[0], st[1]); return l; }
@@ -1739,7 +1740,7 @@ window.__boot = () => {
       bD.className = bP.className = bE.className = bG.className = "tool"; bD.textContent = "Traits droits"; bP.textContent = "Pointillés"; bE.textContent = "Équerre"; bG.textContent = "Gomme";
       const maj = () => {
         bD.classList.toggle("on", !!outils.droit); bP.classList.toggle("on", !!outils.pointilles); bE.classList.toggle("on", !!outils.equerre); bG.classList.toggle("on", !!outils.gomme);
-        if (outils.equerre && !eq) { outils.eq ||= { x: X0 + 4 * CARREAU, y: Y0 + 6 * CARREAU, a: 0 }; eq = equerre(sheet, outils.eq); }
+        if (outils.equerre && !eq) { outils.eq ||= { x: X0 + PAS, y: Y0 + 2 * PAS, a: 0 }; eq = equerre(sheet, outils.eq); }
         if (!outils.equerre && eq) { eq.el.remove(); eq = null; }
       };
       bD.onclick = () => { outils.droit = !outils.droit; maj(); };
@@ -1838,7 +1839,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-m";
+  const VERSION = "2026-11-10-n";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
