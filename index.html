@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-title" content="Le Cartable">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -103,7 +103,7 @@
   --display: "Grandstander", "Chalkboard SE", "Comic Sans MS", system-ui, sans-serif;
   --body: "Andika", "Avenir Next", "Segoe UI", system-ui, sans-serif;
 }
-html, body { height: 100%; }
+html, body { height: 100%; touch-action: manipulation; }
 body {
   background: var(--desk);
   color: var(--ink);
@@ -1459,10 +1459,12 @@ window.__boot = () => {
   }
 
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && document.querySelector(".sheet")) keepAwake(); });
+  // Pas de zoom : ni double tape, ni pincement (Ben, 10/11)
+  ["gesturestart","gesturechange","gestureend"].forEach(e => document.addEventListener(e, ev => ev.preventDefault(), { passive: false }));
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-09-l";
+  const VERSION = "2026-11-10-a";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
