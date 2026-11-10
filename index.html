@@ -288,6 +288,14 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .nav { flex: none; width: 64px; min-height: 64px; border-radius: 14px; background: var(--paper); font-size: 28px; font-weight: 700; box-shadow: 0 2px 0 var(--line); }
 .nav:disabled { opacity: .35; cursor: default; }
 .big.picked { outline: 4px solid var(--ink); outline-offset: 2px; }
+/* Pause toutes les 20 minutes de travail (Ben, 10/11) */
+.pause { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(29,43,79,.45); }
+.pause .boite { background: var(--paper); border-radius: 22px; padding: 28px 24px; width: min(520px, 100%); text-align: center; display: flex; flex-direction: column; gap: 18px; box-shadow: 0 20px 50px rgba(29,43,79,.35); }
+.pause h2 { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 5vw, 40px); margin: 0; }
+.pause p { margin: 0; font-size: 20px; color: var(--muted); }
+.pause .chrono { font-family: var(--display); font-weight: 800; font-size: 44px; color: var(--ink); }
+.pause .btns { display: flex; gap: 12px; flex-wrap: wrap; }
+.pause .big.retry { background: var(--paper); color: var(--ink); }
 /* Félicitations */
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(100px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: #fff; font-family: var(--display); font-weight: 600; font-size: 22px; padding: 14px 24px; border-radius: 99px; box-shadow: 0 10px 30px rgba(29,43,79,.3); z-index: 20; max-width: calc(100% - 32px); text-align: center; animation: pop .3s ease-out; }
 @keyframes pop { from { transform: translate(-50%, 12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
@@ -1841,13 +1849,53 @@ window.__boot = () => {
     };
   }
 
+  /* ---------- Pause toutes les 20 minutes (Ben, 10/11) ---------- */
+  // Le temps compte seulement quand une leçon est ouverte à l'écran (bouton « Mes leçons » présent) et que l'app est visible.
+  // À 20 minutes, l'app propose une pause ; « Rappelle-moi dans 5 minutes » repousse la question de 5 minutes de travail.
+  // Plus de 10 minutes hors leçon (app fermée, accueil) : c'est déjà une pause, le compteur repart de zéro.
+  const PAUSE_APRES = 20 * 60, PAUSE_REPORT = 5 * 60, PAUSE_DEJA_FAITE = 10 * 60 * 1000;
+  const pauseKey = () => "pause:" + (user || "");
+  let pauseVue = null;
+  function pauseTick() {
+    if (!user || pauseVue) return;
+    const now = Date.now();
+    const p = store.get(pauseKey()) || { travail: 0, seuil: PAUSE_APRES, vu: now };
+    if (now - p.vu > PAUSE_DEJA_FAITE) { p.travail = 0; p.seuil = PAUSE_APRES; }
+    const enLecon = document.visibilityState === "visible" && document.getElementById("quit");
+    if (enLecon) p.travail += Math.min(30, Math.round((now - p.vu) / 1000));
+    if (enLecon) p.vu = now;
+    else if (now - p.vu > PAUSE_DEJA_FAITE) p.vu = now;
+    store.set(pauseKey(), p);
+    if (enLecon && p.travail >= p.seuil) proposerPause(p);
+  }
+  function proposerPause(p) {
+    const el = document.createElement("div"); el.className = "pause"; pauseVue = el;
+    el.innerHTML = `<div class="boite" role="dialog" aria-modal="true">
+      <h2>Et si tu faisais une pause, ${esc(user)} ?</h2>
+      <p>Ça fait ${Math.round(p.travail / 60)} minutes que tu travailles. Lève-toi, bois un peu d'eau, bouge un peu.</p>
+      <div class="btns"><button class="big g" id="pauseOui">Je fais une pause</button><button class="big retry" id="pauseNon">Rappelle-moi dans 5 minutes</button></div></div>`;
+    document.body.append(el);
+    const fermer = () => { el.remove(); pauseVue = null; };
+    el.querySelector("#pauseNon").onclick = () => { p.seuil = p.travail + PAUSE_REPORT; p.vu = Date.now(); store.set(pauseKey(), p); fermer(); };
+    el.querySelector("#pauseOui").onclick = () => {
+      const debut = Date.now();
+      const boite = el.querySelector(".boite");
+      boite.innerHTML = `<h2>C'est la pause !</h2><p>Reviens quand tu es prête.</p><div class="chrono" id="pauseChrono">0:00</div>
+        <div class="btns"><button class="big g" id="pauseFin">Je reprends</button></div>`;
+      const chrono = setInterval(() => { const s = Math.floor((Date.now() - debut) / 1000); const c = document.getElementById("pauseChrono"); if (c) c.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }, 1000);
+      boite.querySelector("#pauseFin").onclick = () => { clearInterval(chrono); store.set(pauseKey(), { travail: 0, seuil: PAUSE_APRES, vu: Date.now() }); fermer(); };
+    };
+  }
+  setInterval(pauseTick, 15000);
+  document.addEventListener("visibilitychange", pauseTick);
+
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && document.querySelector(".sheet")) keepAwake(); });
   // Pas de zoom : ni double tape, ni pincement (Ben, 10/11)
   ["gesturestart","gesturechange","gestureend"].forEach(e => document.addEventListener(e, ev => ev.preventDefault(), { passive: false }));
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-o";
+  const VERSION = "2026-11-10-p";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
