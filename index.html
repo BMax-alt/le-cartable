@@ -195,6 +195,12 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .sheet .placeholder { position: absolute; left: 84px; top: 58px; color: var(--muted); opacity: .55; font-size: 20px; pointer-events: none; transition: opacity .2s; }
 .tools { position: absolute; right: 12px; top: 12px; display: flex; gap: 8px; }
 .tool { background: rgba(255,255,255,.92); border-radius: 10px; padding: 8px 14px; font-size: 16px; box-shadow: 0 1px 0 var(--line), 0 2px 8px rgba(29,43,79,.1); }
+.tool.on { background: var(--pen); color: #fff; }
+.equerre { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; transform-origin: 0 0; }
+.equerre .corps { fill: rgba(120, 190, 230, .22); stroke: #2a6f97; stroke-width: 1.5; }
+.equerre .grad { stroke: #2a6f97; stroke-width: 1; }
+.equerre .poignee { pointer-events: auto; fill: #fff; stroke: #2a6f97; stroke-width: 2; cursor: grab; touch-action: none; }
+.equerre .picto { pointer-events: none; fill: #2a6f97; font-size: 18px; font-family: system-ui, sans-serif; }
 .answer {
   position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 55%; overflow-y: auto;
   background: #ffffff; border-radius: 14px; padding: 18px 22px; border: 2px solid var(--good);
@@ -1162,7 +1168,8 @@ window.__boot = () => {
       </div>`;
       // QCM avec brouillon : une feuille pour chercher (tableau, arbre) avant de choisir.
       s.ink[idx] ||= [];
-      const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]) : { stop() {}, undo() {}, clear() {} };
+      s.outils ||= { droit: !!(s.deck.dessin || c.dessin), equerre: false };
+      const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], s.outils) : { stop() {}, undo() {}, clear() {} };
       document.getElementById("undo")?.addEventListener("click", qpad.undo);
       document.getElementById("clear")?.addEventListener("click", qpad.clear);
       navBind(k => { qpad.stop(); s.pos = k; keep(s); card(s); });
@@ -1272,7 +1279,8 @@ window.__boot = () => {
     }
     alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
-    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx]);
+    s.outils ||= { droit: !!(s.deck.dessin || c.dessin), equerre: false };
+    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], s.outils);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
     document.getElementById("undo")?.addEventListener("click", pad.undo);
     document.getElementById("clear")?.addEventListener("click", pad.clear);
@@ -1428,8 +1436,120 @@ window.__boot = () => {
   }
 
   /* ---------- Zone d'écriture au crayon ---------- */
-  function drawPad(cv, ph, strokes) {
+  /* ---------- Dessin géométrique : traits droits aimantés et équerre ---------- */
+  // « Traits droits » : un trait tracé à main levée devient un segment net. Ses deux bouts sont aimantés
+  // sur les carreaux de la feuille (12 px, les lignes Seyès) ou sur le bout d'un segment déjà tracé,
+  // et sa direction sur l'horizontale, la verticale ou la diagonale (45°) quand elle en est proche.
+  // Les longueurs tombent donc pile sur les carreaux : pas d'à-peu-près. Un tracé courbe (écriture) reste tel quel.
+  // « Équerre » : une équerre posée sur la feuille, qu'on déplace (poignée du milieu) et qu'on tourne (poignée du bout),
+  // aimantée sur les carreaux et sur les angles ronds. Un trait tiré le long d'un bord se colle à ce bord.
+  const CARREAU = 12, X0 = 65, Y0 = 11; // mêmes repères que le fond Seyès de .sheet
+  const noeud = p => ({ x: X0 + Math.round((p.x - X0) / CARREAU) * CARREAU, y: Y0 + Math.round((p.y - Y0) / CARREAU) * CARREAU });
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  function bouts(strokes) { const l = []; for (const st of strokes) if (st.length === 2) l.push(st[0], st[1]); return l; }
+  function aimant(p, strokes) {
+    let best = null, d = 10;
+    for (const q of bouts(strokes)) { const e = dist(p, q); if (e < d) { d = e; best = q; } }
+    return best ? { x: best.x, y: best.y } : noeud(p);
+  }
+  function estDroit(pts) {
+    const a = pts[0], b = pts[pts.length - 1], L = dist(a, b);
+    if (L < 18) return false;
+    let dev = 0;
+    for (const p of pts) dev = Math.max(dev, Math.abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / L);
+    return dev <= Math.max(6, 0.12 * L);
+  }
+  // Redresse un trait : renvoie [début, fin] aimantés, ou null si le tracé n'est pas droit.
+  function redresser(pts, strokes, eq) {
+    if (!estDroit(pts)) return null;
+    const a = pts[0], b = pts[pts.length - 1], pr = (a.p + b.p) / 2;
+    // Le long d'un bord de l'équerre ?
+    if (eq) for (const [u, v] of eq.bords()) {
+      const dx = v.x - u.x, dy = v.y - u.y, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+      const ecart = p => Math.abs((p.x - u.x) * uy - (p.y - u.y) * ux);
+      if (ecart(a) > 16 || ecart(b) > 16) continue;
+      const t = p => (p.x - u.x) * ux + (p.y - u.y) * uy;
+      // Départ sur une graduation de l'équerre (un carreau), ou sur le bout d'un segment déjà posé sur ce bord.
+      const ta = Math.round(Math.max(0, Math.min(L, t(a))) / CARREAU) * CARREAU, tb = Math.max(0, Math.min(L, t(b)));
+      let s = { x: u.x + ux * ta, y: u.y + uy * ta };
+      for (const q of bouts(strokes)) if (dist(q, s) < 10 && ecart(q) < 1) { s = { x: q.x, y: q.y }; break; }
+      const k = Math.max(1, Math.round(Math.abs(tb - ta) / CARREAU)) * Math.sign(tb - ta || 1);
+      return [{ ...s, p: pr }, { x: s.x + ux * k * CARREAU, y: s.y + uy * k * CARREAU, p: pr }];
+    }
+    const s = aimant(a, strokes);
+    const dx = b.x - s.x, dy = b.y - s.y, ang = Math.atan2(dy, dx), cran = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
+    let e;
+    if (Math.abs(ang - cran) < 8 * Math.PI / 180) {
+      const ux = Math.round(Math.cos(cran)), uy = Math.round(Math.sin(cran)); // pas de 1 carreau en x et/ou en y
+      const pas = Math.hypot(ux, uy) * CARREAU;
+      const k = Math.max(1, Math.round(Math.hypot(dx, dy) / pas));
+      e = { x: s.x + ux * k * CARREAU, y: s.y + uy * k * CARREAU };
+      const pres = aimant(e, strokes); if (dist(pres, e) < 4) e = pres;
+    } else e = aimant(b, strokes);
+    if (e.x === s.x && e.y === s.y) return null;
+    return [{ ...s, p: pr }, { ...e, p: pr }];
+  }
+  // L'équerre : triangle rectangle isocèle, angle droit à l'origine, côtés de 18 carreaux, graduée tous les carreaux.
+  function equerre(sheet, etat) {
+    const L = 18 * CARREAU, NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg"); svg.setAttribute("class", "equerre"); svg.setAttribute("width", L); svg.setAttribute("height", L);
+    let grads = ""; for (let i = 1; i < 18; i++) { const g = i % 4 ? 6 : 12; grads += `<line class="grad" x1="${i * CARREAU}" y1="0" x2="${i * CARREAU}" y2="${g}"/><line class="grad" x1="0" y1="${i * CARREAU}" x2="${g}" y2="${i * CARREAU}"/>`; }
+    svg.innerHTML = `<polygon class="corps" points="0,0 ${L},0 0,${L}"/>${grads}
+      <circle class="poignee" data-r="move" cx="${L * 0.3}" cy="${L * 0.3}" r="22"/><text class="picto" x="${L * 0.3}" y="${L * 0.3 + 6}" text-anchor="middle">✥</text>
+      <circle class="poignee" data-r="turn" cx="${L - 34}" cy="16" r="18"/><text class="picto" x="${L - 34}" y="${16 + 6}" text-anchor="middle">⟳</text>`;
+    sheet.querySelector("canvas").after(svg); // sous les boutons et sous la réponse
+    const place = () => { svg.style.transform = `translate(${etat.x}px, ${etat.y}px) rotate(${etat.a}deg)`; };
+    const pos = e => { const r = sheet.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    svg.querySelectorAll(".poignee").forEach(h => {
+      let start = null;
+      h.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); try { h.setPointerCapture(e.pointerId); } catch (err) {} start = { p: pos(e), x: etat.x, y: etat.y }; });
+      h.addEventListener("pointermove", e => {
+        if (!start) return; e.preventDefault();
+        const p = pos(e);
+        if (h.dataset.r === "move") {
+          const n = { x: start.x + p.x - start.p.x, y: start.y + p.y - start.p.y }, k = noeud(n);
+          Object.assign(etat, dist(n, k) < 8 ? k : n); // le coin se pose sur un carreau
+        } else {
+          let a = Math.atan2(p.y - etat.y, p.x - etat.x) * 180 / Math.PI - Math.atan2(16, L - 34) * 180 / Math.PI;
+          const r = Math.round(a / 15) * 15; if (Math.abs(a - r) < 4) a = r; // angles ronds : 0, 15, 30, 45, 90…
+          etat.a = a;
+        }
+        place();
+      });
+      const fin = () => { start = null; };
+      h.addEventListener("pointerup", fin); h.addEventListener("pointercancel", fin);
+      ["touchstart", "touchmove"].forEach(t => h.addEventListener(t, ev => ev.cancelable && ev.preventDefault(), { passive: false }));
+    });
+    place();
+    return {
+      el: svg,
+      bords() {
+        const c = Math.cos(etat.a * Math.PI / 180), s = Math.sin(etat.a * Math.PI / 180);
+        const P = (x, y) => ({ x: etat.x + x * c - y * s, y: etat.y + x * s + y * c });
+        const O = P(0, 0), A = P(L, 0), B = P(0, L);
+        return [[O, A], [O, B], [A, B]];
+      }
+    };
+  }
+
+  // outils = { droit, equerre, eq: {x, y, a} } : gardé pour toute la séance (s.outils).
+  function drawPad(cv, ph, strokes, outils) {
     const ctx = cv.getContext("2d");
+    const sheet = cv.parentElement, tools = sheet.querySelector(".tools");
+    let eq = null;
+    if (outils && tools) {
+      const bD = document.createElement("button"), bE = document.createElement("button");
+      bD.className = "tool"; bD.textContent = "Traits droits"; bE.className = "tool"; bE.textContent = "Équerre";
+      const maj = () => {
+        bD.classList.toggle("on", !!outils.droit); bE.classList.toggle("on", !!outils.equerre);
+        if (outils.equerre && !eq) { outils.eq ||= { x: X0 + 4 * CARREAU, y: Y0 + 6 * CARREAU, a: 0 }; eq = equerre(sheet, outils.eq); }
+        if (!outils.equerre && eq) { eq.el.remove(); eq = null; }
+      };
+      bD.onclick = () => { outils.droit = !outils.droit; maj(); };
+      bE.onclick = () => { outils.equerre = !outils.equerre; maj(); };
+      tools.prepend(bD, bE);
+      maj();
+    }
     let current = null, penSeen = false, w = 0, h = 0, rect = null;
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--pen").trim() || "#1f3fa6";
 
@@ -1469,7 +1589,13 @@ window.__boot = () => {
       ctx.strokeStyle = ink; ctx.lineCap = "round";
       for (const ce of evs) { const p = pt(ce); seg(current[current.length - 1], p); current.push(p); }
     });
-    const up = () => { current = null; };
+    const up = () => {
+      if (current && outils?.droit && current.length > 1) {
+        const net = redresser(current, strokes.slice(0, -1), eq);
+        if (net) { current.length = 0; current.push(...net); redraw(); }
+      }
+      current = null;
+    };
     cv.addEventListener("pointerup", up);
     cv.addEventListener("pointercancel", up);
     // Safari iPad : sans ça, le trait du Pencil est pris pour un défilement ou une sélection et se coupe.
@@ -1481,7 +1607,8 @@ window.__boot = () => {
     return {
       undo() { strokes.pop(); redraw(); },
       clear() { strokes.length = 0; redraw(); },
-      stop() { ro.disconnect(); }
+      stop() { ro.disconnect(); },
+      redresser: pts => redresser(pts, strokes, eq) // pour les tests
     };
   }
 
@@ -1491,7 +1618,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-c";
+  const VERSION = "2026-11-10-d";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
