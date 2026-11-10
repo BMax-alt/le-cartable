@@ -1339,7 +1339,7 @@ window.__boot = () => {
       // QCM avec brouillon : une feuille pour chercher (tableau, arbre) avant de choisir.
       s.ink[idx] ||= [];
       s.outils ||= { droit: false, pointilles: false, equerre: false }; if ((s.deck.dessin || c.dessin) && s.outils.carte !== idx) { s.outils.droit = true; s.outils.carte = idx; }
-      const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], s.outils) : { stop() {}, undo() {}, clear() {} };
+      const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : null) : { stop() {}, undo() {}, clear() {} };
       document.getElementById("undo")?.addEventListener("click", qpad.undo);
       document.getElementById("clear")?.addEventListener("click", qpad.clear);
       navBind(k => { qpad.stop(); s.pos = k; keep(s); card(s); });
@@ -1451,7 +1451,7 @@ window.__boot = () => {
     alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
     s.outils ||= { droit: false, pointilles: false, equerre: false }; if ((s.deck.dessin || c.dessin) && s.outils.carte !== idx) { s.outils.droit = true; s.outils.carte = idx; }
-    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], s.outils);
+    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : null);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
     document.getElementById("undo")?.addEventListener("click", pad.undo);
     document.getElementById("clear")?.addEventListener("click", pad.clear);
@@ -1730,6 +1730,8 @@ window.__boot = () => {
     };
   }
 
+  // Outils de géométrie (traits droits, pointillés, équerre, gomme) : seulement sur un paquet de dessin (Ben, 10/11 : « que sur la géométrie »).
+  function geo(deck) { return !!(deck.dessin || deck.cartes.some(c => c.dessin)); }
   // outils = { droit, equerre, eq: {x, y, a} } : gardé pour toute la séance (s.outils).
   function drawPad(cv, ph, strokes, outils) {
     const ctx = cv.getContext("2d");
