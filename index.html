@@ -455,6 +455,29 @@ window.__boot = () => {
     try { cache?.put(key, new Response(blob, { headers: { "Content-Type": blob.type || "image/jpeg" } })).catch(() => {}); } catch (e) {}
     return URL.createObjectURL(blob);
   }
+  // Hors ligne : à chaque ouverture avec du réseau, on télécharge en arrière-plan les photos du cours pas encore gardées
+  // (celles des paquets du niveau de l'élève, une par une), pour que « Revoir le cours » marche aussi en mode avion.
+  let prechargement = false;
+  async function prechargerCours() {
+    if (prechargement || !navigator.onLine) return;
+    prechargement = true;
+    try {
+      const cache = await within(caches.open("cartable-cours"), 1500); if (!cache) return;
+      const niv = user ? niveauDe(user) : null;
+      const chemins = [...new Set(DECKS.filter(d => !niv || (d.niveau || "CM2") === niv)
+        .flatMap(d => Object.values(d.cours || {}).map(c => c.image).filter(Boolean)))];
+      for (const path of chemins) {
+        const key = location.origin + "/__cours/" + path;
+        try {
+          if (await within(cache.match(key), 1500)) continue;
+          const r = await gh(path, { timeout: 30000 }, "application/vnd.github.raw+json");
+          if (!r.ok) continue;
+          const blob = await r.blob();
+          await cache.put(key, new Response(blob, { headers: { "Content-Type": blob.type || "image/jpeg" } }));
+        } catch (e) {}
+      }
+    } catch (e) {} finally { prechargement = false; }
+  }
 
   /* ---------- Progression et sauvegarde automatique ---------- */
   // Chaque réponse est notée sur l'iPad tout de suite, puis envoyée dans le coffre :
@@ -1764,7 +1787,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-i";
+  const VERSION = "2026-11-10-j";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
@@ -1784,7 +1807,7 @@ window.__boot = () => {
   if (eleves().length) { accueil(); loadEleves().then(() => { if (document.getElementById("newuser")) who(); }).catch(() => {}); }
   else { app.innerHTML = '<div class="view who"><p class="hint">Chargement…</p></div>'; within(loadEleves().catch(() => {}), 8000).then(() => accueil()); }
   within(loadEleves().catch(() => {}), 8000).then(() => pullProgress()).then(() => { if (document.querySelector(".home")) back(); });
-  loadDecks().then(() => { if (document.querySelector(".home")) retour == null && !surSemaine ? accueil() : back(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
+  loadDecks().then(() => { prechargerCours(); if (document.querySelector(".home")) retour == null && !surSemaine ? accueil() : back(); }).catch(e => { if (!DECKS.length) settings("Impossible de lire le coffre (" + e.message + ")."); });
   syncNow();
 };
 </script>
