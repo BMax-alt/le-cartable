@@ -163,6 +163,13 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .deck .fait { color: var(--good); font-weight: 700; font-size: 16px; }
 .deck .pour { font-size: 15px; color: var(--muted); }
 .archives-btn { min-height: 0; align-self: flex-start; width: min(420px, 100%); }
+.tache strong { display: flex; align-items: center; gap: 12px; }
+.tache .case { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--muted); display: grid; place-items: center; color: #fff; font-size: 20px; }
+.tache.done .case { background: var(--good); border-color: var(--good); }
+.tuiles { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 720px; }
+.tuile { background: var(--paper); border-radius: 14px; padding: 14px 18px; min-width: 160px; flex: 1; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 0 var(--line); }
+.tuile b { font-family: var(--display); font-size: 40px; color: var(--good); font-variant-numeric: tabular-nums; }
+.tuile span { font-size: 17px; color: var(--muted); }
 .serie { grid-column: 1 / -1; font-family: var(--display); font-weight: 600; font-size: 20px; margin: 6px 0 -4px; }
 .tag.eval { border-style: solid; }
 
@@ -897,9 +904,115 @@ window.__boot = () => {
     const debut = [avant, addDays(date, -7)].filter(Boolean).sort().pop();
     return finies(deck).some(x => x >= debut && x <= date);
   }
-  const jourFait = date => { const e = entreesDu(date); return e.length > 0 && e.every(x => faitPour(x.deck, date)); };
-  // Une dictée (plusieurs groupes) compte pour une seule leçon.
-  const nbLecons = entrees => new Set(entrees.map(e => e.deck.serie || e.deck.id)).size;
+  // Tâches sans paquet (poésie à réciter…) : une case à cocher au jour où il faut savoir.
+  // programme.json : { tache: "Poésie : savoir la réciter", niveau?: "CM2" }. Cochée = une « séance » d'une ligne,
+  // gardée et envoyée dans le coffre comme les autres (pas de premierCoup : elle ne compte pas comme un paquet).
+  const tachesDu = date => (PROG[date] || []).filter(e => e.tache && (!e.niveau || e.niveau === niveauDe(user)));
+  const tacheId = (date, t) => "tache:" + date + ":" + t.tache;
+  const tacheSeance = (date, t) => Object.values(localProg(user).seances).find(sc => sc.paquet === tacheId(date, t));
+  const tacheFaite = (date, t) => { const sc = tacheSeance(date, t); return !!(sc && !sc.abandon); };
+  function cocher(date, t) {
+    const sc = tacheSeance(date, t), now = new Date().toISOString();
+    if (sc) { sc.abandon = !sc.abandon; sc.fin = now; saveSeance(user, sc); }
+    else saveSeance(user, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), debut: now, fin: now, paquet: tacheId(date, t), titre: t.tache, tache: true, cartes: 0, reponses: [{ t: now, note: 2 }] });
+  }
+  const jourFait = date => { const e = entreesDu(date), t = tachesDu(date); return e.length + t.length > 0 && e.every(x => faitPour(x.deck, date)) && t.every(x => tacheFaite(date, x)); };
+  // Une dictée (plusieurs groupes) compte pour une seule leçon. Une tâche compte pour une leçon.
+  const nbLecons = (entrees, date) => new Set(entrees.map(e => e.deck.serie || e.deck.id)).size + (date ? tachesDu(date).length : 0);
+
+  /* ---------- Récaps : la semaine (vendredi soir) et la période (avant les vacances) ---------- */
+  // Vacances scolaires zone B 2026-2027 (calendrier officiel, data.education.gouv.fr, vérifié le 10/11/2026) :
+  // [premier jour de classe, dernier jour de classe] de chaque période. À mettre à jour à chaque rentrée.
+  const PERIODES = [["2026-11-02", "2026-12-18"], ["2027-01-04", "2027-02-19"], ["2027-03-08", "2027-04-16"], ["2027-05-03", "2027-07-02"]];
+  const RECAP_HEURE = 17;
+  // Récap de la semaine : du vendredi 17 h au dimanche soir. Il couvre le travail du samedi précédent au vendredi.
+  function recapSemaine() {
+    const d = new Date(), w = d.getDay();
+    if (!(w === 6 || w === 0 || (w === 5 && d.getHours() >= RECAP_HEURE))) return null;
+    const ven = addDays(todayIso(), w === 5 ? 0 : w === 6 ? -1 : -2);
+    return { type: "semaine", debut: addDays(ven, -4), fin: ven };
+  }
+  // Récap de période : du dernier vendredi de classe (17 h) jusqu'à la rentrée.
+  function recapPeriode() {
+    const t = todayIso(), h = new Date().getHours();
+    const k = PERIODES.findIndex(([, fin], i) => (t > fin || (t === fin && h >= RECAP_HEURE)) && t < (PERIODES[i + 1]?.[0] || addDays(fin, 62)));
+    return k < 0 ? null : { type: "periode", debut: PERIODES[k][0], fin: PERIODES[k][1], num: k + 2 };
+  }
+  const texteCarte = c => c ? (c.q || c.mot || c.phrase || (c.op ? "Une opération à poser" : "")) : "";
+  // Ce qui s'est passé entre deux dates (travail compté à partir du samedi d'avant).
+  function bilanEntre(debut, fin) {
+    const t0 = fromIso(addDays(debut, -2)).getTime(), t1 = fromIso(addDays(fin, 1)).getTime();
+    const dans = iso => { const x = new Date(iso).getTime(); return x >= t0 && x < t1; };
+    const cle = (deck, r) => r.id ?? deck?.ordre0?.[r.carte] ?? deck?.cartes[r.carte]?.id ?? "#" + r.carte;
+    const toutes = Object.values(localProg(user).seances).filter(sc => !sc.tache && sc.reponses?.length)
+      .flatMap(sc => { const deck = DECKS.find(d => d.id === sc.paquet); return sc.reponses.map(r => ({ ...r, sc, deck, k: sc.paquet + "|" + cle(deck, r) })); })
+      .sort((a, b) => a.t < b.t ? -1 : 1);
+    const vues = new Set(), premier = new Set(), pasSue = new Set(), progres = new Map(), paquets = new Set();
+    for (const r of toutes) {
+      if (dans(r.t)) {
+        vues.add(r.k); paquets.add(r.sc.paquet);
+        if ((r.tour || 1) === 1 && r.note === 2 && !pasSue.has(r.k)) premier.add(r.k);
+        if (r.note === 2 && pasSue.has(r.k) && !progres.has(r.k)) {
+          const c = r.deck?.cartes.find((x, i) => cid(r.deck, i) === r.k.split("|")[1]);
+          progres.set(r.k, { texte: texteCarte(c), paquet: r.deck?.titre || r.sc.titre || "" });
+        }
+      }
+      if (r.note !== 2) pasSue.add(r.k); else if (dans(r.t)) pasSue.delete(r.k);
+    }
+    // Les leçons au programme sur ces dates, faites ou non.
+    const lecons = [];
+    for (let x = debut; x <= fin; x = addDays(x, 1)) {
+      const vu = new Set();
+      entreesDu(x).forEach(e => { const id = e.deck.serie || e.deck.id; if (vu.has(id)) return; vu.add(id);
+        const groupe = entreesDu(x).filter(f => (f.deck.serie || f.deck.id) === id);
+        lecons.push({ date: x, titre: e.deck.serie || e.deck.titre, matiere: e.deck.matiere, ok: groupe.every(f => faitPour(f.deck, x)) }); });
+      tachesDu(x).forEach(t => lecons.push({ date: x, titre: t.tache, matiere: t.matiere || "À faire", ok: tacheFaite(x, t) }));
+    }
+    const matieres = {}; [...paquets].forEach(id => { const d = DECKS.find(x => x.id === id); if (d) matieres[d.matiere] = (matieres[d.matiere] || 0) + 1; });
+    return { vues: vues.size, premier: premier.size, progres: [...progres.values()], lecons, matieres };
+  }
+  function recap(r, ensuite) {
+    letSleep();
+    const b = bilanEntre(r.debut, r.fin), faites = b.lecons.filter(l => l.ok).length;
+    const titre = r.type === "semaine" ? `Ta semaine, ${user} !` : `Ta période, ${user} !`;
+    const sous = r.type === "semaine" ? `Du ${longDate(r.debut)} au ${longDate(r.fin)}` : `Période ${r.num} : du ${longDate(r.debut)} au ${longDate(r.fin)}`;
+    const mot = !b.vues ? `Pas de révision cette fois. On s'y remet ensemble, ${user} ?`
+      : b.lecons.length && faites === b.lecons.length ? `Tout ce qu'il fallait savoir, tu l'as travaillé. Bravo ${user} !`
+      : b.progres.length ? `Tu as appris des choses que tu ne savais pas. Continue comme ça, ${user} !`
+      : `Bien joué, ${user} ! Chaque séance compte.`;
+    const tuile = (n, txt) => `<div class="tuile"><b>${n}</b><span>${txt}</span></div>`;
+    const ms = Object.entries(b.matieres).sort((a, b2) => b2[1] - a[1]);
+    app.innerHTML = `<div class="view end recap">
+      <div class="medal" aria-hidden="true">${r.type === "semaine" ? "★" : "🏆"}</div>
+      <h2>${esc(titre)}</h2>
+      <p class="sub">${esc(sous)}</p>
+      <div class="tuiles">
+        ${b.lecons.length ? tuile(`${faites}/${b.lecons.length}`, "leçons travaillées") : ""}
+        ${tuile(b.premier, plural(b.premier, "carte").replace(/^\d+ /, "") + " sue" + (b.premier > 1 ? "s" : "") + " du premier coup")}
+        ${tuile(b.progres.length, (b.progres.length > 1 ? "cartes apprises" : "carte apprise") + " pour de bon")}
+      </div>
+      ${b.progres.length ? `<p class="hint">Ces cartes, tu ne les savais pas. Maintenant, tu les sais :</p>
+        <ul class="review">${b.progres.slice(0, 10).map(p => `<li><span>${esc(p.texte)}</span><span>${esc(p.paquet)}</span></li>`).join("")}</ul>
+        ${b.progres.length > 10 ? `<p class="hint">… et ${b.progres.length - 10} autres.</p>` : ""}` : ""}
+      ${r.type === "semaine" && b.lecons.length ? `<ul class="review">${b.lecons.map(l => `<li><span>${l.ok ? "✓" : "○"} ${esc(l.titre)}</span><span>${esc(longDate(l.date))}</span></li>`).join("")}</ul>` : ""}
+      ${r.type === "periode" && ms.length ? `<p class="hint">Les leçons que tu as révisées, par matière :</p>
+        <ul class="review">${ms.map(([m, n]) => `<li><span>${esc(m)}</span><span>${plural(n, "leçon")}</span></li>`).join("")}</ul>` : ""}
+      <p class="score">${esc(mot)}</p>
+      <div class="actions"><button class="big g" id="ok">Continuer</button></div>
+    </div>`;
+    if (b.vues) confetti();
+    document.getElementById("ok").onclick = ensuite || home;
+  }
+  // À la première ouverture du vendredi soir (ou des vacances), le récap s'affiche tout seul, une fois.
+  function recapAuto() {
+    // Un seul récap par ouverture : celui de la période passe avant celui de la semaine (qui reste dans son bouton).
+    const dispo = [recapPeriode(), recapSemaine()].filter(Boolean), cle = r => "recapVu:" + user + ":" + r.type + ":" + r.fin;
+    const r = dispo.find(x => !store.get(cle(x)));
+    if (!r) return false;
+    dispo.forEach(x => store.set(cle(x), true));
+    recap(r, accueil);
+    return true;
+  }
 
   function deckButtons(list, opts = {}) {
     let serie = null;
@@ -935,10 +1048,12 @@ window.__boot = () => {
   const back = () => retour === "archives" ? archives() : retour ? jour(retour) : home();
 
   // Le jour qu'on prépare : le prochain jour (après aujourd'hui) qui a des leçons. Lundi soir, c'est mardi.
-  const jourCible = () => { const t = todayIso(); return semaine().find(x => x > t && entreesDu(x).length) || null; };
+  const jourCible = () => { const t = todayIso(); return semaine().find(x => x > t && (entreesDu(x).length || tachesDu(x).length)) || null; };
   // À l'ouverture de l'app, on arrive directement sur ce jour-là (sinon sur la semaine).
   let surSemaine = false;
-  function accueil() { const c = jourCible(); c && !surSemaine ? jour(c) : home(); }
+  function accueil() { if (user && niveauDe(user) && recapAuto()) return; const c = jourCible(); c && !surSemaine ? jour(c) : home(); }
+  const recapBoutons = () => [recapSemaine(), recapPeriode()].filter(Boolean).map(r => `<button class="deck archives-btn recap-btn" data-recap="${r.type}"><strong>${r.type === "semaine" ? "★ Ma semaine" : "🏆 Ma période"}</strong><span>${r.type === "semaine" ? "Ce que tu as appris cette semaine" : "Ce que tu as appris depuis la rentrée de la période"}</span></button>`).join("");
+  const bindRecap = () => app.querySelectorAll("[data-recap]").forEach(b => b.onclick = () => recap(b.dataset.recap === "semaine" ? recapSemaine() : recapPeriode(), home));
   // Une liste de paquets rangée par matière, dans l'ordre fixe des matières.
   function parMatiere(entrees, opts) {
     const ms = [...MATIERES, ...new Set(entrees.map(e => e.deck.matiere).filter(m => !MATIERES.includes(m)))];
@@ -967,15 +1082,16 @@ window.__boot = () => {
         ${aRevoir.length ? `<section class="matiere"><h2>À revoir</h2><div class="decks">${deckButtons(aRevoir.map(deck => ({ deck })))}</div></section>` : ""}
         ${parMatiere(mes.map(deck => ({ deck })), {})}
         ${mes.length ? "" : '<p class="hint">Aucune leçon pour l\'instant.</p>'}
+        ${recapBoutons()}
         <p class="hint" id="sync">${esc(syncLabel())}</p>
       </div>`;
       document.getElementById("switch").onclick = () => { user = null; store.set("current", null); surSemaine = false; who(); };
-      bindDecks();
+      bindDecks(); bindRecap();
       return;
     }
     const today = todayIso(), cible = jourCible();
     const jours = semaine().map(date => {
-      const e = entreesDu(date), n = nbLecons(e), d = fromIso(date);
+      const e = entreesDu(date), n = nbLecons(e, date), d = fromIso(date);
       const cls = [n ? "" : "empty", date === cible ? "today" : "", date <= today ? "past" : "", n && jourFait(date) ? "done" : ""].filter(Boolean).join(" ");
       return `<button class="day ${cls}" data-date="${date}" ${n ? "" : "disabled"}>
         <small>à savoir pour</small><b>${JOURS[d.getDay()].slice(0, 3)}. ${d.getDate()}</b>
@@ -985,6 +1101,7 @@ window.__boot = () => {
       <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
       <p class="hint">Ce qu'il faut savoir pour chaque jour de la semaine.</p>
       <section><div class="week">${jours}</div></section>
+      ${recapBoutons()}
       <button class="deck archives-btn" id="archives"><strong>📚 Archives</strong><span>Toutes mes leçons, par matière</span></button>
       ${DECKS.length ? "" : '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
       <p class="hint" id="sync">${esc(syncLabel())}</p>
@@ -992,6 +1109,7 @@ window.__boot = () => {
     document.getElementById("switch").onclick = () => { user = null; store.set("current", null); surSemaine = false; who(); };
     app.querySelectorAll(".day[data-date]").forEach(b => b.onclick = () => jour(b.dataset.date));
     document.getElementById("archives").onclick = archives;
+    bindRecap();
   }
 
   function archives() {
@@ -1018,9 +1136,13 @@ window.__boot = () => {
       <div class="brand"><h1>Pour le ${esc(longDate(date))}</h1></div>
       <p class="hint">${jourFait(date) ? `Tout est fait, bravo ${esc(user)} !` : "Ce qu'il faut savoir ce jour-là. Révise-le avant !"}</p>
       ${parMatiere(entreesDu(date), { date })}
+      ${tachesDu(date).length ? `<section class="matiere"><h2>À faire</h2><div class="decks">${tachesDu(date).map((x, k) => `<button class="deck tache${tacheFaite(date, x) ? " done" : ""}" data-t="${k}">
+          <strong><span class="case">${tacheFaite(date, x) ? "✓" : ""}</span>${esc(x.tache)}</strong>
+          <span class="meta">${tacheFaite(date, x) ? "Fait ! Touche pour décocher." : "Touche la case quand c'est su."}</span></button>`).join("")}</div></section>` : ""}
       <p class="hint" id="sync">${esc(syncLabel())}</p>
     </div>`;
     document.getElementById("week").onclick = () => { surSemaine = true; home(); };
+    app.querySelectorAll(".tache[data-t]").forEach(b => b.onclick = () => { cocher(date, tachesDu(date)[+b.dataset.t]); jour(date); });
     bindDecks();
   }
 
@@ -1618,7 +1740,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-d";
+  const VERSION = "2026-11-10-e";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
