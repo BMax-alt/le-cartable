@@ -166,11 +166,11 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .tache strong { display: flex; align-items: center; gap: 12px; }
 .tache .case { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--muted); display: grid; place-items: center; color: #fff; font-size: 20px; }
 .tache.done .case { background: var(--good); border-color: var(--good); }
-.aapp { display: flex; align-items: center; gap: 12px; align-self: flex-start; width: min(560px, 100%); background: var(--paper); border-radius: 12px; padding: 8px 14px; font-size: 18px; text-align: left; box-shadow: 0 1px 0 var(--line); }
-.aapp .case { flex: none; width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--muted); display: grid; place-items: center; color: #fff; font-size: 17px; }
+.aapp { display: flex; align-items: center; gap: 8px; align-self: flex-start; background: var(--paper); border-radius: 8px; padding: 3px 10px; font-size: 14px; text-align: left; box-shadow: 0 1px 0 var(--line); }
+.aapp .case { flex: none; width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--muted); display: grid; place-items: center; color: #fff; font-size: 12px; }
 .aapp.done .case { background: var(--good); border-color: var(--good); }
 .aapp .txt { font-weight: 700; }
-.aapp .pour { margin-left: auto; color: var(--muted); font-size: 15px; white-space: nowrap; }
+.aapp .pour { margin-left: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .tuiles { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 720px; }
 .tuile { background: var(--paper); border-radius: 14px; padding: 14px 18px; min-width: 160px; flex: 1; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 0 var(--line); }
 .tuile b { font-family: var(--display); font-size: 40px; color: var(--good); font-variant-numeric: tabular-nums; }
@@ -1149,7 +1149,6 @@ window.__boot = () => {
     app.innerHTML = `<div class="view home">
       <div class="topbar"><button class="back" id="week">← Semaine</button></div>
       <div class="brand"><h1>Pour le ${esc(longDate(date))}</h1></div>
-      ${aApprendre().some(x => x.date === date) ? "" : aApprendreHtml()}
       <p class="hint">${jourFait(date) ? `Tout est fait, bravo ${esc(user)} !` : "Ce qu'il faut savoir ce jour-là. Révise-le avant !"}</p>
       ${parMatiere(entreesDu(date), { date })}
       ${tachesDu(date).length ? `<section class="matiere"><h2>À faire</h2><div class="decks">${tachesDu(date).map((x, k) => `<button class="deck tache${tacheFaite(date, x) ? " done" : ""}" data-t="${k}">
@@ -1159,7 +1158,6 @@ window.__boot = () => {
     </div>`;
     document.getElementById("week").onclick = () => { surSemaine = true; home(); };
     app.querySelectorAll(".tache[data-t]").forEach(b => b.onclick = () => { cocher(date, tachesDu(date)[+b.dataset.t]); jour(date); });
-    bindAApprendre(() => jour(date));
     bindDecks();
   }
 
@@ -1766,7 +1764,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-h";
+  const VERSION = "2026-11-10-i";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
