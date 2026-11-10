@@ -916,6 +916,13 @@ window.__boot = () => {
     if (sc) { sc.abandon = !sc.abandon; sc.fin = now; saveSeance(user, sc); }
     else saveSeance(user, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), debut: now, fin: now, paquet: tacheId(date, t), titre: t.tache, tache: true, cartes: 0, reponses: [{ t: now, note: 2 }] });
   }
+  // Tâches « à apprendre » : une tâche qui porte « depuis » (AAAA-MM-JJ) s'affiche en haut de l'accueil, chaque semaine,
+  // à partir de cette date et tant qu'elle n'est pas cochée, même après le jour prévu (« jusqu'à temps qu'elle soit apprise », Ben).
+  const aApprendre = () => Object.keys(PROG).sort().flatMap(date => tachesDu(date).filter(x => x.depuis && x.depuis <= todayIso() && !tacheFaite(date, x)).map(x => ({ date, t: x })));
+  const aApprendreHtml = () => { const l = aApprendre(); return l.length ? `<section class="matiere"><h2>À apprendre</h2><div class="decks">${l.map((x, k) => `<button class="deck tache" data-aa="${k}">
+      <strong><span class="case"></span>${esc(x.t.tache)}</strong><span class="pour">À savoir pour le ${esc(longDate(x.date))}</span>
+      <span class="meta">Touche la case quand c'est su.</span></button>`).join("")}</div></section>` : ""; };
+  const bindAApprendre = refaire => { const l = aApprendre(); app.querySelectorAll("[data-aa]").forEach(b => b.onclick = () => { const x = l[+b.dataset.aa]; cocher(x.date, x.t); refaire(); }); };
   const jourFait = date => { const e = entreesDu(date), t = tachesDu(date); return e.length + t.length > 0 && e.every(x => faitPour(x.deck, date)) && t.every(x => tacheFaite(date, x)); };
   // Une dictée (plusieurs groupes) compte pour une seule leçon. Une tâche compte pour une leçon.
   const nbLecons = (entrees, date) => new Set(entrees.map(e => e.deck.serie || e.deck.id)).size + (date ? tachesDu(date).length : 0);
@@ -1101,6 +1108,7 @@ window.__boot = () => {
       <div class="brand"><h1>Bonjour ${esc(user)} !<span class="lvl">${esc(niveau)}</span></h1><button class="back" id="switch">Changer de prénom</button></div>
       <p class="hint">Ce qu'il faut savoir pour chaque jour de la semaine.</p>
       <section><div class="week">${jours}</div></section>
+      ${aApprendreHtml()}
       ${recapBoutons()}
       <button class="deck archives-btn" id="archives"><strong>📚 Archives</strong><span>Toutes mes leçons, par matière</span></button>
       ${DECKS.length ? "" : '<p class="hint">Aucun paquet de cartes pour l\'instant.</p>'}
@@ -1109,7 +1117,7 @@ window.__boot = () => {
     document.getElementById("switch").onclick = () => { user = null; store.set("current", null); surSemaine = false; who(); };
     app.querySelectorAll(".day[data-date]").forEach(b => b.onclick = () => jour(b.dataset.date));
     document.getElementById("archives").onclick = archives;
-    bindRecap();
+    bindRecap(); bindAApprendre(home);
   }
 
   function archives() {
@@ -1136,6 +1144,7 @@ window.__boot = () => {
       <div class="brand"><h1>Pour le ${esc(longDate(date))}</h1></div>
       <p class="hint">${jourFait(date) ? `Tout est fait, bravo ${esc(user)} !` : "Ce qu'il faut savoir ce jour-là. Révise-le avant !"}</p>
       ${parMatiere(entreesDu(date), { date })}
+      ${aApprendre().some(x => x.date === date) ? "" : aApprendreHtml()}
       ${tachesDu(date).length ? `<section class="matiere"><h2>À faire</h2><div class="decks">${tachesDu(date).map((x, k) => `<button class="deck tache${tacheFaite(date, x) ? " done" : ""}" data-t="${k}">
           <strong><span class="case">${tacheFaite(date, x) ? "✓" : ""}</span>${esc(x.tache)}</strong>
           <span class="meta">${tacheFaite(date, x) ? "Fait ! Touche pour décocher." : "Touche la case quand c'est su."}</span></button>`).join("")}</div></section>` : ""}
@@ -1143,6 +1152,7 @@ window.__boot = () => {
     </div>`;
     document.getElementById("week").onclick = () => { surSemaine = true; home(); };
     app.querySelectorAll(".tache[data-t]").forEach(b => b.onclick = () => { cocher(date, tachesDu(date)[+b.dataset.t]); jour(date); });
+    bindAApprendre(() => jour(date));
     bindDecks();
   }
 
@@ -1749,7 +1759,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-f";
+  const VERSION = "2026-11-10-g";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
