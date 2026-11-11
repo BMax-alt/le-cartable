@@ -1440,7 +1440,7 @@ window.__boot = () => {
           ? `<button class="big retry" id="retry">Réessayer</button><button class="big ${verdict.ok ? "g" : "reveal"}" id="cont">Continuer</button>`
           : shown
           ? `<button class="big retry" id="retry">Réessayer</button>` + grades()
-          : bilan ? "" : `<button class="big reveal" id="show">${dic ? "Voir le mot" : "Voir la réponse"}</button>`}</div>
+          : bilan && grand ? "" : `<button class="big reveal" id="show">${bilan ? "Voir la phrase" : dic ? "Voir le mot" : "Voir la réponse"}</button>`}</div>
         <button class="nav" id="next" ${s.pos === s.order.length - 1 ? "disabled" : ""} aria-label="Question suivante">→</button>
       </div>
     </div>`;
@@ -1464,7 +1464,7 @@ window.__boot = () => {
     alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
     s.outils ||= { droit: false, pointilles: false, equerre: false }; if ((s.deck.dessin || c.dessin) && s.outils.carte !== idx) { s.outils.droit = true; s.outils.carte = idx; }
-    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : null);
+    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : s.deck.crayon ? (s.gomme ||= { seule: true, gomme: false }) : null);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
     document.getElementById("undo")?.addEventListener("click", pad.undo);
     document.getElementById("clear")?.addEventListener("click", pad.clear);
@@ -1754,7 +1754,7 @@ window.__boot = () => {
     const ctx = cv.getContext("2d");
     const sheet = cv.parentElement, tools = sheet.querySelector(".tools");
     let eq = null;
-    sheet.classList.toggle("geo", !!outils);
+    sheet.classList.toggle("geo", !!outils && !outils.seule);
     if (outils && tools) {
       const bD = document.createElement("button"), bP = document.createElement("button"), bE = document.createElement("button"), bG = document.createElement("button");
       bD.className = bP.className = bE.className = bG.className = "tool"; bD.textContent = "Traits droits"; bP.textContent = "Pointillés"; bE.textContent = "Équerre"; bG.textContent = "Gomme";
@@ -1767,7 +1767,8 @@ window.__boot = () => {
       bP.onclick = () => { outils.pointilles = !outils.pointilles; maj(); };
       bE.onclick = () => { outils.equerre = !outils.equerre; maj(); };
       bG.onclick = () => { outils.gomme = !outils.gomme; maj(); };
-      tools.prepend(bD, bP, bE, bG);
+      // Paquet « crayon » (CE1, Ben 11/11 : « une gomme pour effacer une lettre ou un mot ») : la gomme seule.
+      if (outils.seule) tools.prepend(bG); else tools.prepend(bD, bP, bE, bG);
       maj();
     }
     let current = null, penSeen = false, w = 0, h = 0, rect = null;
@@ -1932,7 +1933,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-11-c";
+  const VERSION = "2026-11-11-d";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
