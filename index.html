@@ -1776,8 +1776,10 @@ window.__boot = () => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       redraw();
     }
+    // Épaisseur du trait selon l'appui du stylet : réduite de 30 % (Ben, 11/11 : « l'equivalent de 0,7 mm, pas 1 mm »).
+    const epaisseur = p => 0.85 + 2.25 * p;
     function seg(a, b) {
-      ctx.lineWidth = 1.2 + 3.2 * ((a.p + b.p) / 2);
+      ctx.lineWidth = epaisseur((a.p + b.p) / 2);
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
     function redraw() {
@@ -1787,11 +1789,11 @@ window.__boot = () => {
         // Trait en pointillés (arêtes cachées) : repéré par d sur son premier point, tracé d'un seul chemin.
         if (st[0]?.d && st.length > 1) {
           ctx.save(); ctx.setLineDash([7, 6]); ctx.lineCap = "butt";
-          ctx.lineWidth = 1.2 + 3.2 * (st.reduce((m, q) => m + q.p, 0) / st.length);
+          ctx.lineWidth = epaisseur(st.reduce((m, q) => m + q.p, 0) / st.length);
           ctx.beginPath(); ctx.moveTo(st[0].x, st[0].y); for (const q of st.slice(1)) ctx.lineTo(q.x, q.y); ctx.stroke();
           ctx.restore(); continue;
         }
-        if (st.length === 1) { ctx.beginPath(); ctx.arc(st[0].x, st[0].y, 1.6, 0, 7); ctx.fillStyle = ink; ctx.fill(); }
+        if (st.length === 1) { ctx.beginPath(); ctx.arc(st[0].x, st[0].y, epaisseur(st[0].p) / 2, 0, 7); ctx.fillStyle = ink; ctx.fill(); }
         for (let i = 1; i < st.length; i++) seg(st[i - 1], st[i]);
       }
       ph.style.opacity = strokes.length ? 0 : "";
@@ -1926,7 +1928,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-11-a";
+  const VERSION = "2026-11-11-b";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
