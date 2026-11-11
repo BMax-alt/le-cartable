@@ -1880,10 +1880,41 @@ window.__boot = () => {
     el.querySelector("#pauseOui").onclick = () => {
       const debut = Date.now();
       const boite = el.querySelector(".boite");
-      boite.innerHTML = `<h2>C'est la pause !</h2><p>Reviens quand tu es prête.</p><div class="chrono" id="pauseChrono">0:00</div>
+      boite.innerHTML = `<h2>C'est la pause !</h2><p id="pauseMsg">Ça sonnera dans 5 minutes.</p><div class="chrono" id="pauseChrono">0:00</div>
         <div class="btns"><button class="big g" id="pauseFin">Je reprends</button></div>`;
-      const chrono = setInterval(() => { const s = Math.floor((Date.now() - debut) / 1000); const c = document.getElementById("pauseChrono"); if (c) c.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }, 1000);
-      boite.querySelector("#pauseFin").onclick = () => { clearInterval(chrono); store.set(pauseKey(), { travail: 0, seuil: PAUSE_APRES, vu: Date.now() }); fermer(); };
+      // Sonnerie au bout de 5 minutes (Ben, 11/11). Le son se prépare pendant le toucher « Je fais une pause » (exigence de l'iPad),
+      // et l'écran reste allumé pendant la pause : un iPad en veille ne sonnerait pas.
+      const son = sonnerieLancer();
+      let wake = null; try { navigator.wakeLock?.request("screen").then(w => { wake = w; }).catch(() => {}); } catch (e) {}
+      let sonne = false;
+      const chrono = setInterval(() => {
+        const s = Math.floor((Date.now() - debut) / 1000); const c = document.getElementById("pauseChrono"); if (c) c.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+        if (!sonne && s >= PAUSE_DUREE) { sonne = true; son.jouer(); const m = document.getElementById("pauseMsg"); if (m) m.textContent = "La pause est finie, on reprend !"; }
+      }, 1000);
+      boite.querySelector("#pauseFin").onclick = () => { clearInterval(chrono); son.fermer(); try { wake?.release(); } catch (e) {} store.set(pauseKey(), { travail: 0, seuil: PAUSE_APRES, vu: Date.now() }); fermer(); };
+    };
+  }
+  const PAUSE_DUREE = 5 * 60;
+  // Sonnerie douce : trois fois deux notes de cloche, produites par l'iPad (aucun fichier son).
+  function sonnerieLancer() {
+    let ctx = null;
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "playback"; // sonne même en mode silencieux
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const b = ctx.createBuffer(1, 1, 22050), src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(0); // déverrouille le son
+    } catch (e) { ctx = null; }
+    const note = (freq, t) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = freq; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+      o.start(t); o.stop(t + 1.3);
+    };
+    return {
+      jouer() {
+        if (!ctx) return;
+        try { ctx.resume?.(); const t0 = ctx.currentTime + 0.05; for (let i = 0; i < 3; i++) { note(880, t0 + i * 1.6); note(660, t0 + i * 1.6 + 0.4); } } catch (e) {}
+      },
+      fermer() { try { ctx?.close(); } catch (e) {} }
     };
   }
   setInterval(pauseTick, 15000);
@@ -1895,7 +1926,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-10-p";
+  const VERSION = "2026-11-11-a";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
