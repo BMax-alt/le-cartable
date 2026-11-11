@@ -1395,7 +1395,7 @@ window.__boot = () => {
       ? gradeBtn(0, "b", "À revoir") + gradeBtn(2, "g", "C'est juste !")
       : gradeBtn(0, "b", "À revoir") + gradeBtn(1, "m", "Presque") + gradeBtn(2, "g", "Je savais !");
     const questionHtml = bilan
-      ? `<div class="question"><small>Dictée bilan · groupe ${esc(c.groupe)}</small><p>Écoute bien la phrase, puis écris-la.</p>
+      ? `<div class="question"><small>Dictée bilan${c.groupe ? " · groupe " + esc(c.groupe) : ""}</small><p>Écoute bien la phrase, puis écris-la.</p>
           <div class="listen"><button class="say" id="say">🔊 Écouter</button></div>
           ${essais && !shown ? `<p class="essai">C'est faux, cherche ! Essai ${essais + 1} sur 3${s.essaiMsg ? " · " + esc(s.essaiMsg) : ""}</p>` : ""}</div>`
       : dic
@@ -1540,11 +1540,13 @@ window.__boot = () => {
 
   // Dictée bilan : « Stop ! Le groupe jaune est terminé », dit et affiché, avant de passer au groupe suivant.
   function stopGroupe(groupe, derniere, suite) {
-    const txt = `Stop ! Le groupe ${groupe} est terminé.` + (derniere ? " La dictée est finie." : "");
+    // Dictée bilan sans groupes de couleur (CE1) : « Stop ! La dictée est finie. »
+    const titre = groupe ? `Stop ! Le groupe ${groupe} est terminé.` : "Stop ! La dictée est finie.";
+    const txt = titre + (groupe && derniere ? " La dictée est finie." : "");
     app.innerHTML = `<div class="view end stop">
       <div class="medal" aria-hidden="true">✋</div>
-      <h2>Stop ! Le groupe ${esc(groupe)} est terminé.</h2>
-      ${derniere ? '<p class="sub">La dictée est finie.</p>' : '<p class="sub">On passe au groupe suivant.</p>'}
+      <h2>${esc(titre)}</h2>
+      ${!groupe ? "" : derniere ? '<p class="sub">La dictée est finie.</p>' : '<p class="sub">On passe au groupe suivant.</p>'}
       <div class="actions"><button class="big g" id="suite">${derniere ? "Voir mon résultat" : "Continuer"}</button></div>
     </div>`;
     voice.say([txt]);
@@ -1553,6 +1555,8 @@ window.__boot = () => {
   // Dictée bilan : on choisit jusqu'où on va. Les groupes s'ajoutent : jaune, puis vert, puis violet.
   function choixBilan(deck) {
     const ordre = ["jaune", "vert", "violet"].filter(g => deck.cartes.some(c => c.groupe === g));
+    // Moins de deux groupes de couleur (dictée bilan de CE1) : rien à choisir, on lance toute la dictée.
+    if (ordre.length < 2) return start(deck, deck.cartes.map((c, i) => i));
     const choix = ordre.map((g, k) => ordre.slice(0, k + 1));
     const nom = l => l.map(g => g[0].toUpperCase() + g.slice(1)).join(" + ");
     app.innerHTML = `<div class="view end">
@@ -1928,7 +1932,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-11-b";
+  const VERSION = "2026-11-11-c";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
