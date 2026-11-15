@@ -1233,9 +1233,9 @@ window.__boot = () => {
     let indices = t.liste(e.indices), order = t.liste(e.order);
     // Séance sur tout le paquet : les cartes ajoutées depuis son début passent à la fin, au tour en cours
     // (Ben, 15/11 : 31 cartes en ligne, la reprise n'en proposait que 19).
-    // « tout » est noté au départ de la séance. Séance plus ancienne, sans ce repère : elle couvrait tout
-    // si ses cartes sont le début du paquet sans trou (une séance « cartes difficiles » a des trous).
-    const tout = sc?.tout ?? (!deck.bilan && indices.length > 0 && indices.slice().sort((a, b) => a - b).every((v, i) => v === i));
+    // « tout » est noté au départ de la séance. Séance plus ancienne, sans ce repère : tout le paquet,
+    // sauf en dictée bilan (groupes choisis).
+    const tout = sc?.tout ?? !deck.bilan;
     if (tout) {
       const dans = new Set(indices);
       const nouvelles = deck.cartes.map((_, i) => i).filter(i => !dans.has(i));
@@ -1945,7 +1945,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-15-a";
+  const VERSION = "2026-11-15-b";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
