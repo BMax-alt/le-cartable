@@ -1227,10 +1227,21 @@ window.__boot = () => {
     return { m, liste, dico };
   }
   // État de reprise recalé sur l'ordre actuel des cartes.
-  function recaler(e, deck) {
+  function recaler(e, deck, sc) {
     const avant = e.ids || deck.ordre0 || idsDe(deck);
     const t = traducteur(deck, avant);
-    return { ...e, indices: t.liste(e.indices), order: t.liste(e.order), grade: t.dico(e.grade), first: t.dico(e.first), saisie: t.dico(e.saisie),
+    let indices = t.liste(e.indices), order = t.liste(e.order);
+    // Séance sur tout le paquet : les cartes ajoutées depuis son début passent à la fin, au tour en cours
+    // (Ben, 15/11 : 31 cartes en ligne, la reprise n'en proposait que 19).
+    // « tout » est noté au départ de la séance. Séance plus ancienne, sans ce repère : elle couvrait tout
+    // si ses cartes sont le début du paquet sans trou (une séance « cartes difficiles » a des trous).
+    const tout = sc?.tout ?? (!deck.bilan && indices.length > 0 && indices.slice().sort((a, b) => a - b).every((v, i) => v === i));
+    if (tout) {
+      const dans = new Set(indices);
+      const nouvelles = deck.cartes.map((_, i) => i).filter(i => !dans.has(i));
+      indices = indices.concat(nouvelles); order = order.concat(nouvelles);
+    }
+    return { ...e, indices, order, grade: t.dico(e.grade), first: t.dico(e.first), saisie: t.dico(e.saisie),
       shown: t.dico(e.shown), pick: t.dico(e.pick), essais: t.dico(e.essais), brouillon: t.dico(e.brouillon), ids: idsDe(deck), idsAvant: avant };
   }
   function seanceEnCours(deckId) {
@@ -1239,7 +1250,8 @@ window.__boot = () => {
       .sort((a, b) => a.debut < b.debut ? 1 : -1)[0];
     if (!sc) return null;
     const deck = DECKS.find(d => d.id === deckId); if (!deck) return null;
-    sc.etat = sc.etat ? recaler(sc.etat, deck) : rebuildEtat(sc, deck);
+    sc.etat = sc.etat ? recaler(sc.etat, deck, sc) : rebuildEtat(sc, deck);
+    sc.cartes = sc.etat.indices.length;
     return sc;
   }
   // Séance enregistrée avant l'ajout de la reprise (pas d'état) : on reconstruit l'état à partir des réponses.
@@ -1293,7 +1305,7 @@ window.__boot = () => {
   function start(deck, indices) {
     keepAwake();
     const s = { deck, indices: indices.slice(), total: indices.length, partial: indices.length !== deck.cartes.length, round: 1, first: {}, streak: 0, best: 0 };
-    s.seance = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), debut: new Date().toISOString(), paquet: deck.id, titre: deck.titre, cartes: indices.length, reponses: [] };
+    s.seance = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), debut: new Date().toISOString(), paquet: deck.id, titre: deck.titre, cartes: indices.length, tout: indices.length === deck.cartes.length, reponses: [] };
     newRound(s, indices);
     card(s);
   }
@@ -1933,7 +1945,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-11-d";
+  const VERSION = "2026-11-15-a";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
