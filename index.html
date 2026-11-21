@@ -210,6 +210,7 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
    au-dessus de la première grande ligne : on écrit sur toute la largeur (Ben, 10/11 : « on ne peut plus écrire sur les 3-4 carreaux à droite »). */
 .tools { position: absolute; right: 0; top: 0; height: 46px; display: flex; gap: 8px; align-items: center; padding: 0 8px; z-index: 2; }
 .tools .tool { font-size: 15px; padding: 5px 12px; }
+.tools .tool:disabled { opacity: .35; }
 .sheet:not(.geo) canvas { top: 46px !important; height: calc(100% - 46px) !important; }
 .sheet.geo { --colonne: 128px; }
 .sheet.geo .tools { bottom: 0; height: auto; width: var(--colonne); flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 8px; overflow-y: auto;
@@ -1354,7 +1355,7 @@ window.__boot = () => {
           ${answered ? `<div class="verdict ${ok ? "ok" : "ko"}"><b>${ok ? pick([`Bravo ${esc(user)} !`, "C'est juste !", "Exactement !"]) : "Pas tout à fait."}</b>${esc(c.explication || "")}</div>` : ""}
         </div>
         ${c.brouillon ? `<div class="sheet" id="sheet"><canvas id="cv"></canvas><span class="placeholder" id="ph">Brouillon : fais ton tableau ici…</span>
-          <div class="tools"><button class="tool" id="undo">Annuler</button><button class="tool" id="clear">Tout effacer</button></div></div>` : ""}
+          <div class="tools"><button class="tool" id="undo">Annuler</button><button class="tool" id="redo">Rétablir</button><button class="tool" id="clear">Tout effacer</button></div></div>` : ""}
         <div class="actions">
           <button class="nav" id="prev" ${s.pos === 0 ? "disabled" : ""} aria-label="Question précédente">←</button>
           <div class="main" id="main">${answered ? `<button class="big retry" id="retry">Réessayer</button><button class="big ${ok ? "g" : "reveal"}" id="cont">Continuer</button>` : ""}</div>
@@ -1364,8 +1365,9 @@ window.__boot = () => {
       // QCM avec brouillon : une feuille pour chercher (tableau, arbre) avant de choisir.
       s.ink[idx] ||= [];
       s.outils ||= { droit: false, pointilles: false, equerre: false }; if ((s.deck.dessin || c.dessin) && s.outils.carte !== idx) { s.outils.droit = true; s.outils.carte = idx; }
-      const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : null) : { stop() {}, undo() {}, clear() {} };
+      const qpad = c.brouillon ? drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : null) : { stop() {}, undo() {}, redo() {}, clear() {} };
       document.getElementById("undo")?.addEventListener("click", qpad.undo);
+      document.getElementById("redo")?.addEventListener("click", qpad.redo);
       document.getElementById("clear")?.addEventListener("click", qpad.clear);
       navBind(k => { qpad.stop(); s.pos = k; keep(s); card(s); });
       document.querySelectorAll(".choice[data-k]").forEach(b => b.onclick = () => {
@@ -1438,6 +1440,7 @@ window.__boot = () => {
         <span class="placeholder" id="ph">Écris ta réponse ici…</span>
         <div class="tools">
           <button class="tool" id="undo">Annuler</button>
+          <button class="tool" id="redo">Rétablir</button>
           <button class="tool" id="clear">Tout effacer</button>
         </div>`}
         <div class="answer${verdict && !verdict.ok ? " ko" : ""}" id="ans" ${shown ? "" : "hidden"}>
@@ -1476,9 +1479,10 @@ window.__boot = () => {
     alignLigne(); document.fonts?.ready.then(alignLigne);
     s.ink[idx] ||= [];
     s.outils ||= { droit: false, pointilles: false, equerre: false }; if ((s.deck.dessin || c.dessin) && s.outils.carte !== idx) { s.outils.droit = true; s.outils.carte = idx; }
-    const pad = grand ? { stop() {}, undo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : s.deck.crayon ? (s.gomme ||= { seule: true, gomme: false }) : null);
+    const pad = grand ? { stop() {}, undo() {}, redo() {}, clear() {} } : drawPad(document.getElementById("cv"), document.getElementById("ph"), s.ink[idx], geo(s.deck) ? s.outils : s.deck.crayon ? (s.gomme ||= { seule: true, gomme: false }) : null);
     const go = k => { pad.stop(); voice.stop(); s.pos = k; keep(s); card(s); };
     document.getElementById("undo")?.addEventListener("click", pad.undo);
+    document.getElementById("redo")?.addEventListener("click", pad.redo);
     document.getElementById("clear")?.addEventListener("click", pad.clear);
     navBind(go);
     document.getElementById("quit").onclick = () => { pad.stop(); voice.stop(); closeCours(); keep(s); back(); };
@@ -1762,6 +1766,7 @@ window.__boot = () => {
   // Outils de géométrie (traits droits, pointillés, équerre, gomme) : seulement sur un paquet de dessin (Ben, 10/11 : « que sur la géométrie »).
   function geo(deck) { return !!(deck.dessin || deck.cartes.some(c => c.dessin)); }
   // outils = { droit, equerre, eq: {x, y, a} } : gardé pour toute la séance (s.outils).
+  const HISTO = new WeakMap(), HISTO_MAX = 10;
   function drawPad(cv, ph, strokes, outils) {
     const ctx = cv.getContext("2d");
     const sheet = cv.parentElement, tools = sheet.querySelector(".tools");
@@ -1784,6 +1789,13 @@ window.__boot = () => {
       maj();
     }
     let current = null, penSeen = false, w = 0, h = 0, rect = null;
+    // Annuler / Rétablir : les 10 derniers gestes (trait, gomme, Tout effacer), gardés par feuille pendant la séance
+    // (Ben, 21/11 : « il faudrait que l'appli garde en memoire 10 undos / redos »).
+    const hist = HISTO.get(strokes) || { passe: [], futur: [] }; HISTO.set(strokes, hist);
+    const bUndo = sheet.querySelector("#undo"), bRedo = sheet.querySelector("#redo");
+    const majHisto = () => { if (bUndo) bUndo.disabled = !hist.passe.length; if (bRedo) bRedo.disabled = !hist.futur.length; };
+    const memo = () => { hist.passe.push(strokes.slice()); if (hist.passe.length > HISTO_MAX) hist.passe.shift(); hist.futur.length = 0; majHisto(); };
+    const remettre = l => { strokes.length = 0; strokes.push(...l); redraw(); majHisto(); };
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--pen").trim() || "#1f3fa6";
 
     function size() {
@@ -1832,8 +1844,8 @@ window.__boot = () => {
       if (!allowed(e)) return;
       e.preventDefault(); rect = cv.getBoundingClientRect();
       try { cv.setPointerCapture(e.pointerId); } catch (err) {}
-      if (outils?.gomme) { gommer = true; gommeEn(pt(e)); return; }
-      current = [pt(e)]; if (outils?.pointilles) current[0].d = 1; strokes.push(current); redraw();
+      if (outils?.gomme) { gommer = true; memo(); gommeEn(pt(e)); return; }
+      memo(); current = [pt(e)]; if (outils?.pointilles) current[0].d = 1; strokes.push(current); redraw();
     });
     cv.addEventListener("pointermove", e => {
       if (gommer && allowed(e)) { e.preventDefault(); (e.getCoalescedEvents ? e.getCoalescedEvents() : [e]).forEach(ce => gommeEn(pt(ce))); return; }
@@ -1844,6 +1856,8 @@ window.__boot = () => {
       for (const ce of evs) { const p = pt(ce); seg(current[current.length - 1], p); current.push(p); }
     });
     const up = () => {
+      // Un coup de gomme qui n'a rien effacé ne compte pas comme un geste.
+      if (gommer && hist.passe.length && hist.passe[hist.passe.length - 1].length === strokes.length) { hist.passe.pop(); majHisto(); }
       gommer = false;
       if (current && outils?.droit && current.length > 1) {
         const net = redresser(current, strokes.slice(0, -1), eq);
@@ -1859,10 +1873,11 @@ window.__boot = () => {
     ["touchstart", "touchmove", "touchend"].forEach(t => cv.addEventListener(t, block, { passive: false }));
     cv.addEventListener("contextmenu", block);
     const ro = new ResizeObserver(size); ro.observe(cv);
-    size();
+    size(); majHisto();
     return {
-      undo() { strokes.pop(); redraw(); },
-      clear() { strokes.length = 0; redraw(); },
+      undo() { if (!hist.passe.length) return; hist.futur.push(strokes.slice()); remettre(hist.passe.pop()); },
+      redo() { if (!hist.futur.length) return; hist.passe.push(strokes.slice()); remettre(hist.futur.pop()); },
+      clear() { if (!strokes.length) return; memo(); strokes.length = 0; redraw(); },
       stop() { ro.disconnect(); },
       redresser: pts => redresser(pts, strokes, eq) // pour les tests
     };
@@ -1945,7 +1960,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-15-b";
+  const VERSION = "2026-11-21-a";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
