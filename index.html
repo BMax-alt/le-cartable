@@ -146,6 +146,12 @@ button:focus-visible { outline: 3px solid var(--pen); outline-offset: 2px; }
 .qtable { border-collapse: collapse; background: var(--paper); font-size: 15px; margin-top: 6px; align-self: flex-start; }
 .qtable th, .qtable td { border: 1px solid var(--line); padding: 2px 10px; text-align: center; }
 .qtable thead th { background: var(--label); font-weight: 700; }
+.droite { display: block; width: 100%; max-width: 680px; height: auto; margin-top: 8px; background: var(--paper); border-radius: 10px; align-self: flex-start; }
+.droite .ax { stroke: var(--ink); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.droite .tk { stroke: var(--ink); stroke-width: 1.5; }
+.droite .nb { fill: var(--ink); font: 700 20px var(--body); text-anchor: middle; }
+.droite .pt { fill: var(--pen); }
+.droite .lt { fill: var(--pen); font: 800 24px var(--body); text-anchor: middle; }
 .qtable tbody th { text-align: left; font-weight: 600; }
 /* Semaine : ce qu'il faut savoir pour chaque jour de la fiche */
 .week { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
@@ -820,6 +826,21 @@ window.__boot = () => {
     return `<table class="qtable"><thead><tr>${t.colonnes.map(x => `<th>${esc(x)}</th>`).join("")}</tr></thead>
       <tbody>${t.lignes.map(l => `<tr>${l.map((x, k) => k ? `<td>${esc(x)}</td>` : `<th>${esc(x)}</th>`).join("")}</tr>`).join("")}</tbody></table>`;
   }
+  // Une droite graduée dans la question (Ben, 22/11) : { debut: "6", pas: "0.1", n: 20, maj: 10, points: [["A", 13]] }.
+  // n graduations de « pas » à partir de « debut » ; un nombre écrit toutes les « maj » graduations ; chaque point = [lettre, graduation].
+  function droiteHtml(c) {
+    const d = c.droite; if (!d) return "";
+    const dec = x => (String(x).split(".")[1] || "").length, nd = Math.max(dec(d.debut), dec(d.pas)), P = 10 ** nd;
+    const a = Math.round(Number(d.debut) * P), p = Math.round(Number(d.pas) * P);
+    const lire = k => { const v = a + k * p, e = Math.floor(v / P), r = String(v % P).padStart(nd, "0").replace(/0+$/, ""); return r ? `${e},${r}` : `${e}`; };
+    const W = 680, M = 40, L = W - 2 * M - 24, Y = 58, x = k => M + k * L / d.n;
+    let g = `<line x1="${M - 12}" y1="${Y}" x2="${W - 14}" y2="${Y}" class="ax"/><path d="M${W - 24} ${Y - 7} L${W - 12} ${Y} L${W - 24} ${Y + 7}" class="ax"/>`;
+    for (let k = 0; k <= d.n; k++) { const m = k % (d.maj || d.n) === 0;
+      g += `<line x1="${x(k)}" y1="${Y - (m ? 13 : 7)}" x2="${x(k)}" y2="${Y + (m ? 13 : 7)}" class="${m ? "ax" : "tk"}"/>`;
+      if (m) g += `<text x="${x(k)}" y="${Y + 38}" class="nb">${lire(k)}</text>`; }
+    for (const [l, k] of d.points || []) g += `<circle cx="${x(k)}" cy="${Y}" r="5" class="pt"/><text x="${x(k)}" y="${Y - 22}" class="lt">${esc(l)}</text>`;
+    return `<svg class="droite" viewBox="0 0 ${W} 110" role="img" aria-label="Une droite graduée">${g}</svg>`;
+  }
   function verdictHtml(v, saisi) {
     if (!v) return "";
     return v.ok
@@ -1354,7 +1375,7 @@ window.__boot = () => {
       const ok = picked === c.bon;
       app.innerHTML = `<div class="view">
         ${topbar}
-        <div class="question"><div class="qhead"><small>Questionnaire · avant les exercices</small>${coursBtn}</div><p>${esc(c.q)}</p></div>
+        <div class="question"><div class="qhead"><small>Questionnaire · avant les exercices</small>${coursBtn}</div><p>${esc(c.q)}</p>${droiteHtml(c)}</div>
         <div class="choices${c.brouillon ? " compact" : ""}">
           ${c.choix.map((x, k) => `<button class="choice ${answered && k === c.bon ? "right" : ""} ${answered && k === picked && !ok ? "wrong" : ""}" data-k="${k}" ${answered ? "disabled" : ""}>${esc(x)}</button>`).join("")}
           ${answered ? `<div class="verdict ${ok ? "ok" : "ko"}"><b>${ok ? pick([`Bravo ${esc(user)} !`, "C'est juste !", "Exactement !"]) : "Pas tout à fait."}</b>${esc(c.explication || "")}</div>` : ""}
@@ -1421,10 +1442,10 @@ window.__boot = () => {
       ? `<div class="question"><small>Dictée · mot ${s.pos + 1}</small><p>Écoute bien, puis écris le mot.</p>
           <div class="listen"><button class="say" id="say">🔊 Écouter</button>${c.phrase ? '<button class="say alt" id="sayphrase">Une phrase d\'exemple</button>' : ""}</div></div>`
       : trou
-      ? `<div class="question"><div class="qhead"><small>${c.brouillon ? "Problème · cherche sur la feuille, puis écris la réponse dans la case" : "Question · écris la réponse dans la case"}</small>${coursBtn}</div><p>${esc(c.q)}</p>${tableHtml(c)}</div>`
+      ? `<div class="question"><div class="qhead"><small>${c.brouillon ? "Problème · cherche sur la feuille, puis écris la réponse dans la case" : "Question · écris la réponse dans la case"}</small>${coursBtn}</div><p>${esc(c.q)}</p>${tableHtml(c)}${droiteHtml(c)}</div>`
       : posee
       ? `<div class="question"><div class="qhead"><small>Exercice · pose l'opération sur la feuille</small>${coursBtn}</div><p>${esc(c.q || "Pose et calcule :")} ${esc(c.nombres.join(" " + c.op + " "))}</p></div>`
-      : `<div class="question"><div class="qhead"><small>${c.points ? "Question · écris ta réponse sur la feuille" : "Question"}</small>${coursBtn}</div><p>${esc(c.q)}</p>${tableHtml(c)}</div>`;
+      : `<div class="question"><div class="qhead"><small>${c.points ? "Question · écris ta réponse sur la feuille" : "Question"}</small>${coursBtn}</div><p>${esc(c.q)}</p>${tableHtml(c)}${droiteHtml(c)}</div>`;
     const answerHtml = bilan
       ? `${verdictHtml(verdict, saisi)}<small>La phrase</small><p class="r">${esc(c.phrase)}</p>`
       : dic
@@ -1965,7 +1986,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-22-a";
+  const VERSION = "2026-11-22-b";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
