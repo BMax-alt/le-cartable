@@ -797,6 +797,11 @@ window.__boot = () => {
     const sans = v.replace(petits, "");
     if (sans && sans !== v && !att.some(a => petits.test(a)) && att.some(a => checkMot(sans, a).ok)) v = sans;
     saisi = v;
+    // Réponse avec des chiffres (« 70 cm3 », « 0,45 ») : les espaces ne comptent pas (Griffonner en met ou pas : « 70cm3 »),
+    // et un nombre se compare par sa valeur (« 0,70 » vaut « 0,7 », le point vaut la virgule).
+    const serre = x => String(x).replace(/\s+/g, "").replace(/³/g, "3").toLowerCase();
+    if (att.some(a => /\d/.test(a) && serre(a) === serre(saisi))) return { ok: true };
+    if (att.some(a => /^\d+([,.]\d+)?$/.test(String(a).trim()) && /^[\d\s]+([,.]\d+)?$/.test(saisi) && checkNombre(saisi.replace(".", ","), String(a).replace(".", ",")).ok)) return { ok: true };
     const res = att.map(a => checkMot(saisi, a));
     return res.find(r => r.ok) || res.find(r => r.msg) || res[0];
   }
@@ -819,7 +824,7 @@ window.__boot = () => {
     if (!v) return "";
     return v.ok
       ? `<p class="verdict-line ok">${esc(pick([`Bravo ${user} !`, "C'est juste !", "Exactement !"]))}</p>`
-      : `<p class="verdict-line ko">Ce n'est pas ça : tu as écrit « ${esc(saisi)} ».</p>${v.msg ? `<p class="phrase">${esc(v.msg)}</p>` : ""}`;
+      : `<p class="verdict-line ko">Ce n'est pas ça : l'iPad a lu « ${esc(saisi)} ».</p><p class="phrase">Si ce n'est pas ce que tu as écrit, appuie sur « Réessayer ».</p>${v.msg ? `<p class="phrase">${esc(v.msg)}</p>` : ""}`;
   }
 
   /* ---------- Panneau du cours ---------- */
@@ -1960,7 +1965,7 @@ window.__boot = () => {
   // Mise à jour automatique : l'app de l'écran d'accueil reste en mémoire et garderait l'ancienne version.
   // À l'ouverture et à chaque retour dans l'app, on compare avec la version en ligne et on recharge si elle a changé,
   // seulement hors séance (pas au milieu d'une carte).
-  const VERSION = "2026-11-21-a";
+  const VERSION = "2026-11-22-a";
   async function verifierVersion() {
     try {
       const r = await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" });
